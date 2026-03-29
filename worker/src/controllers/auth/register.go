@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"openauth/worker/models"
 	"openauth/worker/utils"
@@ -91,6 +93,12 @@ func Register(msg *nats.Msg) {
 
 	refreshToken, err := sessions.GenerateRefreshToken(user.ID, sessionID)
 	if err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
+	ctx := context.Background()
+	if err := sessions.SaveSession(ctx, sessionID, user.ID, time.Duration(utils.Config.JWT.RefreshTokenTTL)*time.Second); err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}

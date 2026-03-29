@@ -13,6 +13,8 @@ type Worker interface {
 	Login(email, password string) (*LoginResult, error)
 	TFAVerify(sessionID, code string) (*TokenResult, error)
 	RefreshToken(refreshToken string) (*TokenResult, error)
+	Verify(accessToken string) (*UserResult, error)
+	Logout(accessToken string) error
 }
 
 type LoginResult struct {
@@ -27,6 +29,22 @@ type LoginResult struct {
 type TokenResult struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
+}
+
+type CredentialResult struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Value    string `json:"value"`
+	Verified bool   `json:"verified"`
+}
+
+type UserResult struct {
+	ID          string             `json:"id"`
+	Status      string             `json:"status"`
+	TfaMethod   string             `json:"tfa_method"`
+	CreatedAt   string             `json:"created_at"`
+	UpdatedAt   string             `json:"updated_at"`
+	Credentials []CredentialResult `json:"credentials"`
 }
 
 type workerError struct {
@@ -140,4 +158,44 @@ func (w *WorkerClient) RefreshToken(refreshToken string) (*TokenResult, error) {
 	}
 
 	return &result, nil
+}
+
+func (w *WorkerClient) Verify(accessToken string) (*UserResult, error) {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+	msg, err := w.nc.Request("auth.session.verify", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker session.verify: %w", err)
+	}
+
+	var result UserResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker session.verify decode: %w", err)
+	}
+
+	if result.ID == "" {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) Logout(accessToken string) error {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+	msg, err := w.nc.Request("auth.logout", payload, w.timeout)
+	if err != nil {
+		return fmt.Errorf("worker logout: %w", err)
+	}
+
+	var e workerError
+	if err := json.Unmarshal(msg.Data, &e); err != nil {
+		return fmt.Errorf("worker logout decode: %w", err)
+	}
+
+	if e.Message != "" {
+		return fmt.Errorf("%s", e.Message)
+	}
+
+	return nil
 }

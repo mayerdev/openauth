@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"openauth/gateway/federation"
 	oauth2provider "openauth/gateway/federation/oauth2"
+	"openauth/gateway/federation/oauth2/handlers"
 	"openauth/gateway/services"
 	"openauth/gateway/transport"
 	"openauth/gateway/utils"
@@ -25,6 +26,11 @@ func Setup() *fiber.App {
 	for _, p := range providers {
 		p.Register(app)
 	}
+
+	me := handlers.NewMeHandler(worker)
+	api := app.Group("/api")
+	api.Get("/me", me.GetMe)
+	api.Post("/logout", me.PostLogout)
 
 	return app
 }

@@ -103,6 +103,11 @@ func Login(msg *nats.Msg) {
 		return
 	}
 
+	if err := sessions.SaveSession(ctx, sessionID, user.ID, time.Duration(utils.Config.JWT.RefreshTokenTTL)*time.Second); err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
 	data, _ := json.Marshal(AuthResult{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
