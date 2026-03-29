@@ -1,0 +1,253 @@
+openapi: 3.0.3
+info:
+  title: OpenAuth Gateway
+  version: 1.0.0
+
+paths:
+  /oauth2/authorize:
+    get:
+      summary: Initialize authorization session
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code]
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: scope
+          in: query
+          schema:
+            type: string
+            default: openid
+      responses:
+        "200":
+          description: Auth session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizeInitResponse"
+        "400":
+          description: Invalid client or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      summary: Submit credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Redirect URL or TFA challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LoginSuccessResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
+        "400":
+          description: Invalid session or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /oauth2/tfa:
+    post:
+      summary: Submit TFA code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TFARequest"
+      responses:
+        "200":
+          description: Redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          description: Invalid session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid or expired TFA code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /oauth2/token:
+    post:
+      summary: Exchange authorization code or refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid grant or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid client credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    AuthorizeInitResponse:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        client_name:
+          type: string
+        scope:
+          type: string
+      required: [auth_session_id, client_name, scope]
+
+    LoginRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [auth_session_id, email, password]
+
+    LoginSuccessResponse:
+      type: object
+      properties:
+        redirect_url:
+          type: string
+          description: Full redirect URI with code and state query params
+      required: [redirect_url]
+
+    TFARequiredResponse:
+      type: object
+      properties:
+        tfa_required:
+          type: boolean
+          enum: [true]
+        tfa_session_id:
+          type: string
+        tfa_method:
+          type: string
+          enum: [totp]
+        expires_in:
+          type: integer
+          description: TFA session TTL in seconds
+      required: [tfa_required, tfa_session_id, tfa_method, expires_in]
+
+    TFARequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        tfa_session_id:
+          type: string
+        code:
+          type: string
+      required: [auth_session_id, tfa_session_id, code]
+
+    TokenRequest:
+      type: object
+      properties:
+        grant_type:
+          type: string
+          enum: [authorization_code, refresh_token]
+        code:
+          type: string
+          description: Required for authorization_code grant
+        redirect_uri:
+          type: string
+          description: Required for authorization_code grant
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        refresh_token:
+          type: string
+          description: Required for refresh_token grant
+      required: [grant_type, client_id, client_secret]
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+        refresh_token:
+          type: string
+        scope:
+          type: string
+      required: [access_token, token_type, expires_in, refresh_token]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - invalid_credentials
+            - unsupported_response_type
+            - unsupported_grant_type
+            - server_error
+        error_description:
+          type: string
+      required: [error]
