@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"openauth/worker/models"
 	"openauth/worker/utils"
@@ -85,6 +86,23 @@ func TfaVerify(msg *nats.Msg) {
 				}
 			}
 		}
+
+	case "email", "phone":
+		ok, err := sessions.VerifyTfaCode(ctx, req.SessionID, req.Code)
+		if err != nil {
+			if errors.Is(err, sessions.ErrMaxAttempts) {
+				msg.Respond(types.EmitError("Max attempts exceeded", types.NoErrors))
+				return
+			}
+
+			msg.Respond(types.EmitError("Internal error", types.NoErrors))
+			return
+		}
+
+		if ok {
+			verified = true
+			_ = sessions.DeleteTfaCode(ctx, req.SessionID)
+		}
 	}
 
 	if !verified {
@@ -108,6 +126,11 @@ func TfaVerify(msg *nats.Msg) {
 
 	refreshToken, err := sessions.GenerateRefreshToken(userID, sessionID)
 	if err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
+	if err := sessions.SaveSession(ctx, sessionID, userID, time.Duration(utils.Config.JWT.RefreshTokenTTL)*time.Second); err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}

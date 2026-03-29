@@ -17,6 +17,20 @@ type Worker interface {
 	Logout(accessToken string) error
 	OAuthMethod(provider, providerID, email, name string) (*LoginResult, error)
 	Web3Method(address string) (*TokenResult, error)
+	TotpStart(accessToken string) (*TotpStartResult, error)
+	TotpConfirm(accessToken, code string) (*TotpConfirmResult, error)
+	TotpUnlink(accessToken string) error
+	TfaMethodGet(accessToken string) (string, error)
+	TfaMethodSet(accessToken, method string) error
+}
+
+type TotpStartResult struct {
+	ProvisioningURI string `json:"provisioning_uri"`
+	Secret          string `json:"secret"`
+}
+
+type TotpConfirmResult struct {
+	BackupCodes []string `json:"backup_codes"`
 }
 
 type LoginResult struct {
@@ -229,6 +243,102 @@ func (w *WorkerClient) Web3Method(address string) (*TokenResult, error) {
 	}
 
 	return &result, nil
+}
+
+func (w *WorkerClient) TotpStart(accessToken string) (*TotpStartResult, error) {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+	msg, err := w.nc.Request("auth.totp.start", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker totp.start: %w", err)
+	}
+
+	var result TotpStartResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker totp.start decode: %w", err)
+	}
+
+	if result.ProvisioningURI == "" {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) TotpConfirm(accessToken, code string) (*TotpConfirmResult, error) {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken, "code": code})
+	msg, err := w.nc.Request("auth.totp.confirm", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker totp.confirm: %w", err)
+	}
+
+	var result TotpConfirmResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker totp.confirm decode: %w", err)
+	}
+
+	if result.BackupCodes == nil {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) TotpUnlink(accessToken string) error {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+	msg, err := w.nc.Request("auth.totp.unlink", payload, w.timeout)
+	if err != nil {
+		return fmt.Errorf("worker totp.unlink: %w", err)
+	}
+
+	var e workerError
+	json.Unmarshal(msg.Data, &e)
+	if e.Message != "" {
+		return fmt.Errorf("%s", e.Message)
+	}
+
+	return nil
+}
+
+func (w *WorkerClient) TfaMethodGet(accessToken string) (string, error) {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+	msg, err := w.nc.Request("auth.tfa.method.get", payload, w.timeout)
+	if err != nil {
+		return "", fmt.Errorf("worker tfa.method.get: %w", err)
+	}
+
+	var result struct {
+		Method  string `json:"method"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return "", fmt.Errorf("worker tfa.method.get decode: %w", err)
+	}
+
+	if result.Method == "" {
+		return "", fmt.Errorf("%s", result.Message)
+	}
+
+	return result.Method, nil
+}
+
+func (w *WorkerClient) TfaMethodSet(accessToken, method string) error {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken, "method": method})
+	msg, err := w.nc.Request("auth.tfa.method.set", payload, w.timeout)
+	if err != nil {
+		return fmt.Errorf("worker tfa.method.set: %w", err)
+	}
+
+	var e workerError
+	json.Unmarshal(msg.Data, &e)
+	if e.Message != "" {
+		return fmt.Errorf("%s", e.Message)
+	}
+
+	return nil
 }
 
 func (w *WorkerClient) Logout(accessToken string) error {

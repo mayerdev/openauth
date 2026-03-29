@@ -3,11 +3,14 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math/rand"
 	"time"
 
 	"openauth/worker/models"
 	"openauth/worker/utils"
 	"openauth/worker/utils/credentials"
+	"openauth/worker/utils/sender"
 	"openauth/worker/utils/sessions"
 
 	"gorm.io/gorm"
@@ -53,6 +56,28 @@ func FindOrCreateByCredential(credType, value string, bypassTFA bool) (*FindOrCr
 		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute)
 		if err != nil {
 			return nil, errors.New("internal error")
+		}
+
+		if user.TfaMethod == "email" || user.TfaMethod == "phone" {
+			var allCreds []models.UserCredential
+			utils.Database.Where("user_id = ?", user.ID).Find(&allCreds)
+
+			code := fmt.Sprintf("%06d", rand.Intn(1000000))
+			_ = sessions.StoreTfaCode(ctx, tfaSessionID, user.ID, code, user.TfaMethod, 5*time.Minute)
+
+			sendType := "sms"
+			credType := credentials.CredentialTypePhone
+			if user.TfaMethod == "email" {
+				sendType = "email"
+				credType = credentials.CredentialTypeEmail
+			}
+
+			for _, c := range allCreds {
+				if c.Type == credType {
+					sender.SendCode(utils.Nats, sendType, c.Value, code)
+					break
+				}
+			}
 		}
 
 		return &FindOrCreateResult{

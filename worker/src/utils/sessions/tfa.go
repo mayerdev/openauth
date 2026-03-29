@@ -106,6 +106,11 @@ func StoreTfaCode(ctx context.Context, sessionID string, userID uuid.UUID, code,
 	return utils.Redis.Expire(ctx, key, ttl).Err()
 }
 
+func DeleteTfaCode(ctx context.Context, sessionID string) error {
+	key := fmt.Sprintf("%s:%s", prefixTfaCode, sessionID)
+	return utils.Redis.Del(ctx, key).Err()
+}
+
 func VerifyTfaCode(ctx context.Context, sessionID, input string) (bool, error) {
 	key := fmt.Sprintf("%s:%s", prefixTfaCode, sessionID)
 

@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand"
 	"time"
 
 	"openauth/worker/utils"
 	"openauth/worker/utils/credentials"
+	"openauth/worker/utils/sender"
 	"openauth/worker/utils/sessions"
 	"openauth/worker/utils/types"
 
@@ -45,7 +48,7 @@ func Login(msg *nats.Msg) {
 		return
 	}
 
-	user, _, err := credentials.FindUserByCredential(utils.Database, credentials.CredentialTypeEmail, req.Email)
+	user, allCreds, err := credentials.FindUserByCredential(utils.Database, credentials.CredentialTypeEmail, req.Email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			msg.Respond(types.EmitError("Invalid credentials", types.NoErrors))
@@ -73,6 +76,29 @@ func Login(msg *nats.Msg) {
 		if err != nil {
 			msg.Respond(types.EmitError("Internal error", types.NoErrors))
 			return
+		}
+
+		if user.TfaMethod == "email" || user.TfaMethod == "phone" {
+			code := fmt.Sprintf("%06d", rand.Intn(1000000))
+			_ = sessions.StoreTfaCode(ctx, tfaSessionID, user.ID, code, user.TfaMethod, 5*time.Minute)
+			sendType := "sms"
+			notifTo := ""
+
+			if user.TfaMethod == "email" {
+				sendType = "email"
+				notifTo = req.Email
+			} else {
+				for _, c := range allCreds {
+					if c.Type == credentials.CredentialTypePhone {
+						notifTo = c.Value
+						break
+					}
+				}
+			}
+
+			if notifTo != "" {
+				sender.SendCode(utils.Nats, sendType, notifTo, code)
+			}
 		}
 
 		data, _ := json.Marshal(TfaRequiredResult{

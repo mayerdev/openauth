@@ -28,9 +28,16 @@ func Setup() *fiber.App {
 	}
 
 	me := handlers.NewMeHandler(worker)
+	totp := handlers.NewTotpHandler(worker)
+
 	api := app.Group("/api")
 	api.Get("/me", me.GetMe)
 	api.Post("/logout", me.PostLogout)
+	api.Post("/totp/start", totp.PostTotpStart)
+	api.Post("/totp/confirm", totp.PostTotpConfirm)
+	api.Post("/totp/unlink", totp.PostTotpUnlink)
+	api.Get("/tfa/method", totp.GetTfaMethod)
+	api.Put("/tfa/method", totp.PutTfaMethod)
 
 	return app
 }
