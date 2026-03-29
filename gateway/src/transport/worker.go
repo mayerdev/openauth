@@ -9,6 +9,7 @@ import (
 )
 
 type Worker interface {
+	Register(email, password string) (*TokenResult, error)
 	Login(email, password string) (*LoginResult, error)
 	TFAVerify(sessionID, code string) (*TokenResult, error)
 	RefreshToken(refreshToken string) (*TokenResult, error)
@@ -29,8 +30,21 @@ type TokenResult struct {
 }
 
 type workerError struct {
+	Message string             `json:"message"`
+	Errors  []WorkerFieldError `json:"errors"`
+}
+
+type WorkerFieldError struct {
+	Reason  string `json:"reason"`
 	Message string `json:"message"`
 }
+
+type WorkerValidationError struct {
+	Message string
+	Fields  []WorkerFieldError
+}
+
+func (e *WorkerValidationError) Error() string { return e.Message }
 
 type WorkerClient struct {
 	nc      *nats.Conn
@@ -39,6 +53,30 @@ type WorkerClient struct {
 
 func NewWorkerClient(nc *nats.Conn, timeout time.Duration) *WorkerClient {
 	return &WorkerClient{nc: nc, timeout: timeout}
+}
+
+func (w *WorkerClient) Register(email, password string) (*TokenResult, error) {
+	payload, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	msg, err := w.nc.Request("auth.register", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker register: %w", err)
+	}
+
+	var result TokenResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker register decode: %w", err)
+	}
+
+	if result.AccessToken == "" {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		if len(e.Errors) > 0 {
+			return nil, &WorkerValidationError{Message: e.Message, Fields: e.Errors}
+		}
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
 }
 
 func (w *WorkerClient) Login(email, password string) (*LoginResult, error) {

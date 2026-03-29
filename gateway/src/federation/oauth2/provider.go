@@ -15,6 +15,7 @@ type Provider struct {
 	loginHandler     *handlers.LoginHandler
 	tfaHandler       *handlers.TFAHandler
 	tokenHandler     *handlers.TokenHandler
+	registerHandler  *handlers.RegisterHandler
 }
 
 func NewProvider(worker transport.Worker, sessions *services.AuthSessionService, codes *services.AuthCodeService) *Provider {
@@ -23,6 +24,7 @@ func NewProvider(worker transport.Worker, sessions *services.AuthSessionService,
 		loginHandler:     handlers.NewLoginHandler(sessions, worker, codes),
 		tfaHandler:       handlers.NewTFAHandler(sessions, worker, codes),
 		tokenHandler:     handlers.NewTokenHandler(worker, codes),
+		registerHandler:  handlers.NewRegisterHandler(sessions, worker, codes),
 	}
 }
 
@@ -30,6 +32,7 @@ func (p *Provider) Name() string { return "oauth2" }
 
 func (p *Provider) Register(app *fiber.App) {
 	g := app.Group("/oauth2")
+	g.Post("/register", p.registerHandler.PostRegister)
 	g.Get("/authorize", p.authorizeHandler.GetAuthorize)
 	g.Post("/authorize", p.loginHandler.PostAuthorize)
 	g.Post("/tfa", p.tfaHandler.PostTFA)

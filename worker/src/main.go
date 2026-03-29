@@ -1,6 +1,7 @@
 package main
 
 import (
+	"openauth/worker/models"
 	"os"
 	"time"
 
@@ -21,6 +22,9 @@ func main() {
 	casbinutil.Init()
 	utils.RedisConnect()
 	utils.NatsConnect()
+
+	utils.Database.AutoMigrate(&models.User{})
+	utils.Database.AutoMigrate(&models.UserCredential{})
 
 	router.Setup()
 

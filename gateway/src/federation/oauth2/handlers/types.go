@@ -8,6 +8,12 @@ type AuthorizeQueryParams struct {
 	Scope        string `query:"scope"`
 }
 
+type RegisterRequest struct {
+	AuthSessionID string `json:"auth_session_id"`
+	Email         string `json:"email"`
+	Password      string `json:"password"`
+}
+
 type LoginRequest struct {
 	AuthSessionID string `json:"auth_session_id"`
 	Email         string `json:"email"`
@@ -54,7 +60,13 @@ type TokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
+type FieldError struct {
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+}
+
 type ErrorResponse struct {
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description,omitempty"`
+	Error            string       `json:"error"`
+	ErrorDescription string       `json:"error_description,omitempty"`
+	Errors           []FieldError `json:"errors,omitempty"`
 }

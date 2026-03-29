@@ -110,7 +110,11 @@ func (h *LoginHandler) PostAuthorize(c fiber.Ctx) error {
 }
 
 func (h *LoginHandler) issueCodeAndRedirect(c fiber.Ctx, sess *services.AuthSession, sessID, accessToken, refreshToken string) error {
-	code, err := h.codes.Create(c.Context(), services.AuthCodeEntry{
+	return issueCodeAndRedirect(c, h.sessions, h.codes, sess, sessID, accessToken, refreshToken)
+}
+
+func issueCodeAndRedirect(c fiber.Ctx, sessions AuthSessionRepo, codes AuthCodeRepo, sess *services.AuthSession, sessID, accessToken, refreshToken string) error {
+	code, err := codes.Create(c.Context(), services.AuthCodeEntry{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		Scope:        sess.Scope,
@@ -121,7 +125,7 @@ func (h *LoginHandler) issueCodeAndRedirect(c fiber.Ctx, sess *services.AuthSess
 		return c.Status(500).JSON(ErrorResponse{Error: "server_error"})
 	}
 
-	h.sessions.Delete(c.Context(), sessID)
+	sessions.Delete(c.Context(), sessID)
 
 	return c.JSON(LoginSuccessResponse{
 		RedirectURL: buildRedirectURL(sess.RedirectURI, code, sess.State),

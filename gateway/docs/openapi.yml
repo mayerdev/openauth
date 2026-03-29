@@ -4,6 +4,33 @@ info:
   version: 1.0.0
 
 paths:
+  /oauth2/register:
+    post:
+      summary: Register a new account
+      description: |
+        Creates a new account and, on success, issues an authorization code
+        via redirect — identical flow to POST /oauth2/authorize.
+        Requires an active auth session initiated via GET /oauth2/authorize.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Account created, redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          description: Validation error, email already taken, or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /oauth2/authorize:
     get:
       summary: Initialize authorization session
@@ -151,6 +178,19 @@ components:
           type: string
       required: [auth_session_id, client_name, scope]
 
+    RegisterRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          description: Min 8 chars, must include uppercase, lowercase, digit, and special character
+      required: [auth_session_id, email, password]
+
     LoginRequest:
       type: object
       properties:
@@ -235,6 +275,17 @@ components:
           type: string
       required: [access_token, token_type, expires_in, refresh_token]
 
+    FieldError:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Field name
+        message:
+          type: string
+          description: Validation tag (e.g. required, email, password)
+      required: [reason, message]
+
     ErrorResponse:
       type: object
       properties:
@@ -245,9 +296,15 @@ components:
             - invalid_client
             - invalid_grant
             - invalid_credentials
+            - registration_failed
             - unsupported_response_type
             - unsupported_grant_type
             - server_error
         error_description:
           type: string
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+          description: Field-level validation errors, present when error is registration_failed
       required: [error]
