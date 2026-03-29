@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go"
+	"github.com/rs/zerolog/log"
 )
 
 var Nats *nats.Conn
@@ -17,4 +18,9 @@ func NatsConnect() {
 	if err != nil {
 		panic(err)
 	}
+
+	log.Info().
+		Str("host", Config.NATS.Host).
+		Int("port", Config.NATS.Port).
+		Msg("NATS connected")
 }

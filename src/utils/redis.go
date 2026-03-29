@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 var Redis *redis.Client
@@ -17,4 +18,9 @@ func RedisConnect() {
 	if err := Redis.Ping(context.Background()).Err(); err != nil {
 		panic(err)
 	}
+
+	log.Info().
+		Str("host", Config.Redis.Host).
+		Int("port", Config.Redis.Port).
+		Msg("Redis connected")
 }

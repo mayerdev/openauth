@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"errors"
+	"os"
+
 	"github.com/spf13/viper"
 )
 
@@ -10,7 +13,7 @@ type ConfigFile struct {
 		Port     int    `mapstructure:"port"`
 		User     string `mapstructure:"user"`
 		Password string `mapstructure:"password"`
-		Database string `mapstructure:"database"`
+		Name     string `mapstructure:"name"`
 		Schema   string `mapstructure:"schema"`
 	} `mapstructure:"database"`
 
@@ -36,20 +39,19 @@ var Config ConfigFile
 
 func LoadConfig() {
 	viper.SetConfigFile(".env")
-	viper.SetConfigType("env")
 
 	if err := viper.ReadInConfig(); err != nil {
-		panic(err)
+		if !errors.Is(err, os.ErrNotExist) {
+			panic(err)
+		}
 	}
-
-	viper.AddConfigPath(".")
 
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.schema", "public")
 	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.user", "postgres")
 	viper.SetDefault("database.password", "password")
-	viper.SetDefault("database.database", "openauth")
+	viper.SetDefault("database.name", "openauth")
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
 
@@ -59,7 +61,7 @@ func LoadConfig() {
 	viper.SetDefault("jwt.access_token_ttl", 21600)
 	viper.SetDefault("jwt.refresh_token_ttl", 604800)
 
-	viper.SetEnvPrefix("OA")
+	viper.SetEnvPrefix("APP")
 	viper.AutomaticEnv()
 
 	if err := viper.Unmarshal(&Config); err != nil {

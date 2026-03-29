@@ -5,9 +5,10 @@ import (
 
 	"openauth/utils"
 
-	"github.com/casbin/casbin/v2"
-	"github.com/casbin/casbin/v2/model"
+	"github.com/casbin/casbin/v3"
+	"github.com/casbin/casbin/v3/model"
 	gormadapter "github.com/casbin/gorm-adapter/v3"
+	"github.com/rs/zerolog/log"
 )
 
 const rbacModel = `
@@ -44,4 +45,6 @@ func Init() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create Casbin enforcer: %v", err))
 	}
+
+	log.Info().Msg("Casbin initialized")
 }
