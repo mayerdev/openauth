@@ -20,7 +20,7 @@ func Setup() *fiber.App {
 	codes := services.NewAuthCodeService(utils.Redis)
 
 	providers := []federation.Provider{
-		oauth2provider.NewProvider(worker, sessions, codes),
+		oauth2provider.NewProvider(worker, sessions, codes, utils.Redis),
 	}
 
 	for _, p := range providers {

@@ -14,6 +14,12 @@ type Client struct {
 	RedirectURIs []string `mapstructure:"redirect_uris"`
 }
 
+type OAuthProviderConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURI  string `mapstructure:"redirect_uri"`
+}
+
 type ConfigFile struct {
 	Server struct {
 		Port int `mapstructure:"port"`
@@ -34,6 +40,17 @@ type ConfigFile struct {
 	} `mapstructure:"jwt"`
 
 	Clients []Client `mapstructure:"clients"`
+
+	OAuthProviders map[string]OAuthProviderConfig `mapstructure:"oauth_providers"`
+
+	Frontend struct {
+		TFARedirectURI string `mapstructure:"tfa_redirect_uri"`
+	} `mapstructure:"frontend"`
+
+	Web3 struct {
+		Domain string `mapstructure:"domain"`
+		URI    string `mapstructure:"uri"`
+	} `mapstructure:"web3"`
 }
 
 var Config ConfigFile
@@ -60,6 +77,15 @@ func LoadConfig() {
 	if err := viper.Unmarshal(&Config); err != nil {
 		panic(err)
 	}
+}
+
+func FindOAuthProvider(name string) *OAuthProviderConfig {
+	cfg, ok := Config.OAuthProviders[name]
+	if !ok {
+		return nil
+	}
+
+	return &cfg
 }
 
 func FindClient(id string) *Client {

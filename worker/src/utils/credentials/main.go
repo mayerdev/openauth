@@ -12,11 +12,17 @@ type CredentialType = string
 const (
 	CredentialTypeEmail CredentialType = "email"
 	CredentialTypePhone CredentialType = "phone"
+	CredentialTypeWeb3  CredentialType = "web3"
 )
+
+func CredentialTypeOAuth(provider string) CredentialType {
+	return "oauth:" + provider
+}
 
 var SupportedCredentialTypes = []CredentialType{
 	CredentialTypeEmail,
 	CredentialTypePhone,
+	CredentialTypeWeb3,
 }
 
 type CredentialPolicy struct {
@@ -27,6 +33,7 @@ type CredentialPolicy struct {
 var CredentialPolicies = map[CredentialType]CredentialPolicy{
 	CredentialTypeEmail: {PasswordRequired: true, BypassTFA: false},
 	CredentialTypePhone: {PasswordRequired: true, BypassTFA: false},
+	CredentialTypeWeb3:  {PasswordRequired: false, BypassTFA: true},
 }
 
 func FindUserByCredential(db *gorm.DB, credType, value string) (*models.User, []models.UserCredential, error) {

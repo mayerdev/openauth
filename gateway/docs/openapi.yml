@@ -46,6 +46,137 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /oauth2/methods/email/login:
+    post:
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Redirect URL or TFA challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LoginSuccessResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /oauth2/methods/email/register:
+    post:
+      summary: Register with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/oauth/{provider}/start:
+    post:
+      summary: Initiate OAuth provider login
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthStartRequest"
+      responses:
+        "200":
+          description: Provider redirect URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthStartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/oauth/{provider}/callback:
+    get:
+      summary: OAuth provider callback (browser redirect)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to client redirect_uri with code, or to TFA page
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/web3/start:
+    post:
+      summary: Initiate Web3/SIWE login — returns message to sign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Web3StartRequest"
+      responses:
+        "200":
+          description: SIWE message and its keccak256 hash
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Web3StartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/web3/consume:
+    post:
+      summary: Complete Web3 login by submitting signed message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Web3ConsumeRequest"
+      responses:
+        "200":
+          description: Redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /oauth2/register:
     post:
       summary: Register a new account
@@ -208,6 +339,20 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -264,6 +409,55 @@ components:
         scope:
           type: string
       required: [auth_session_id, client_name, scope]
+
+    OAuthStartRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+      required: [auth_session_id]
+
+    OAuthStartResponse:
+      type: object
+      properties:
+        redirect_url:
+          type: string
+          description: Provider authorization URL (open in browser)
+      required: [redirect_url]
+
+    Web3StartRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        address:
+          type: string
+          description: Ethereum address (0x...)
+      required: [auth_session_id, address]
+
+    Web3StartResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: EIP-4361 SIWE message to sign with wallet
+        hash:
+          type: string
+          description: Keccak256 hash of the message (hex)
+      required: [message, hash]
+
+    Web3ConsumeRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        message:
+          type: string
+          description: The SIWE message returned by /web3/start
+        signature:
+          type: string
+          description: Hex-encoded signature from wallet (personal_sign)
+      required: [auth_session_id, message, signature]
 
     RegisterRequest:
       type: object

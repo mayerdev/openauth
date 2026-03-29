@@ -15,6 +15,8 @@ type Worker interface {
 	RefreshToken(refreshToken string) (*TokenResult, error)
 	Verify(accessToken string) (*UserResult, error)
 	Logout(accessToken string) error
+	OAuthMethod(provider, providerID, email, name string) (*LoginResult, error)
+	Web3Method(address string) (*TokenResult, error)
 }
 
 type LoginResult struct {
@@ -173,6 +175,54 @@ func (w *WorkerClient) Verify(accessToken string) (*UserResult, error) {
 	}
 
 	if result.ID == "" {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) OAuthMethod(provider, providerID, email, name string) (*LoginResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"provider":    provider,
+		"provider_id": providerID,
+		"email":       email,
+		"name":        name,
+	})
+
+	msg, err := w.nc.Request("auth.method.oauth", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker method.oauth: %w", err)
+	}
+
+	var result LoginResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker method.oauth decode: %w", err)
+	}
+
+	if result.AccessToken == "" && !result.TFARequired {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) Web3Method(address string) (*TokenResult, error) {
+	payload, _ := json.Marshal(map[string]string{"address": address})
+	msg, err := w.nc.Request("auth.method.web3", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker method.web3: %w", err)
+	}
+
+	var result TokenResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker method.web3 decode: %w", err)
+	}
+
+	if result.AccessToken == "" {
 		var e workerError
 		json.Unmarshal(msg.Data, &e)
 		return nil, fmt.Errorf("%s", e.Message)
