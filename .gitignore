@@ -3,3 +3,4 @@ build/
 openauth
 .idea
 .env
+config.yaml
