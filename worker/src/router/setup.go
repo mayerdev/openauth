@@ -18,6 +18,9 @@ func Setup() {
 	utils.Nats.QueueSubscribe("auth.method.oauth", queueGroup, auth.OAuthMethod)
 	utils.Nats.QueueSubscribe("auth.method.web3", queueGroup, auth.Web3Method)
 
+	utils.Nats.QueueSubscribe("auth.credential.verify", queueGroup, auth.CredentialVerify)
+	utils.Nats.QueueSubscribe("auth.credential.verify.resend", queueGroup, auth.CredentialVerifyResend)
+
 	utils.Nats.QueueSubscribe("auth.totp.start", queueGroup, auth.TotpStart)
 	utils.Nats.QueueSubscribe("auth.totp.confirm", queueGroup, auth.TotpConfirm)
 	utils.Nats.QueueSubscribe("auth.totp.unlink", queueGroup, auth.TotpUnlink)

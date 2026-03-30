@@ -4,6 +4,8 @@ info:
   version: 1.0.0
 
 paths:
+  # ─── User API (authenticated) ────────────────────────────────────────────────
+
   /api/me:
     get:
       summary: Get current user info and credentials
@@ -17,11 +19,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserResponse"
         "401":
-          description: Missing, invalid, or expired token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
 
   /api/logout:
     post:
@@ -34,175 +32,107 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                    enum: [true]
-        "401":
-          description: Missing or invalid token
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /oauth2/methods/email/login:
-    post:
-      summary: Login with email and password
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-      responses:
-        "200":
-          description: Redirect URL or TFA challenge
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: "#/components/schemas/LoginSuccessResponse"
-                  - $ref: "#/components/schemas/TFARequiredResponse"
+                $ref: "#/components/schemas/OkResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /oauth2/methods/email/register:
+  /api/totp/start:
     post:
-      summary: Register with email and password
+      summary: Begin TOTP setup — generates a new secret and provisioning URI
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: TOTP secret and otpauth:// URI for QR code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/totp/confirm:
+    post:
+      summary: Confirm TOTP setup with a code from the authenticator app
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RegisterRequest"
+              $ref: "#/components/schemas/TotpConfirmRequest"
       responses:
         "200":
-          description: Redirect URL with authorization code
+          description: TOTP activated; backup codes returned
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LoginSuccessResponse"
+                $ref: "#/components/schemas/TotpConfirmResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
-  /oauth2/methods/oauth/{provider}/start:
+  /api/totp/unlink:
     post:
-      summary: Initiate OAuth provider login
-      parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [google, github]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OAuthStartRequest"
+      summary: Remove TOTP from the account
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: Provider redirect URL
+          description: TOTP removed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OAuthStartResponse"
+                $ref: "#/components/schemas/OkResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
-  /oauth2/methods/oauth/{provider}/callback:
+  /api/tfa/method:
     get:
-      summary: OAuth provider callback (browser redirect)
-      parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: code
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: state
-          in: query
-          required: true
-          schema:
-            type: string
+      summary: Get current TFA method
+      security:
+        - bearerAuth: []
       responses:
-        "302":
-          description: Redirect to client redirect_uri with code, or to TFA page
-        "400":
-          $ref: "#/components/responses/BadRequest"
+        "200":
+          description: Current TFA method
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TfaMethodResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
-  /oauth2/methods/web3/start:
-    post:
-      summary: Initiate Web3/SIWE login — returns message to sign
+    put:
+      summary: Set TFA method
+      description: |
+        To set `totp`, TOTP must already be configured via `/api/totp/confirm`.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Web3StartRequest"
+              $ref: "#/components/schemas/TfaMethodRequest"
       responses:
         "200":
-          description: SIWE message and its keccak256 hash
+          description: TFA method updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Web3StartResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
-  /oauth2/methods/web3/consume:
-    post:
-      summary: Complete Web3 login by submitting signed message
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Web3ConsumeRequest"
-      responses:
-        "200":
-          description: Redirect URL with authorization code
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginSuccessResponse"
+                $ref: "#/components/schemas/OkResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /oauth2/register:
-    post:
-      summary: Register a new account
-      description: |
-        Creates a new account and, on success, issues an authorization code
-        via redirect — identical flow to POST /oauth2/authorize.
-        Requires an active auth session initiated via GET /oauth2/authorize.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterRequest"
-      responses:
-        "200":
-          description: Account created, redirect URL with authorization code
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginSuccessResponse"
-        "400":
-          description: Validation error, email already taken, or invalid session
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+  # ─── OAuth2 Core ─────────────────────────────────────────────────────────────
 
   /oauth2/authorize:
     get:
@@ -241,14 +171,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthorizeInitResponse"
         "400":
-          description: Invalid client or request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
 
     post:
-      summary: Submit credentials
+      summary: Submit email/password credentials
       requestBody:
         required: true
         content:
@@ -265,21 +191,13 @@ paths:
                   - $ref: "#/components/schemas/LoginSuccessResponse"
                   - $ref: "#/components/schemas/TFARequiredResponse"
         "400":
-          description: Invalid session or request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
 
   /oauth2/tfa:
     post:
-      summary: Submit TFA code
+      summary: Submit TFA code (TOTP, email, or phone)
       requestBody:
         required: true
         content:
@@ -294,21 +212,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/LoginSuccessResponse"
         "400":
-          description: Invalid session
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Invalid or expired TFA code
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
 
   /oauth2/token:
     post:
-      summary: Exchange authorization code or refresh token
+      summary: Exchange authorization code or refresh token for tokens
       requestBody:
         required: true
         content:
@@ -320,23 +230,196 @@ paths:
               $ref: "#/components/schemas/TokenRequest"
       responses:
         "200":
-          description: Token response
+          description: Token pair
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TokenResponse"
         "400":
-          description: Invalid grant or request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Invalid client credentials
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── Auth Methods ─────────────────────────────────────────────────────────────
+
+  /oauth2/methods/email/login:
+    post:
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Redirect URL or TFA challenge
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/LoginSuccessResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /oauth2/methods/email/register:
+    post:
+      summary: Register with email and password
+      description: |
+        Creates a new account and sends a verification code to the provided email.
+        Tokens are NOT issued immediately — the client must verify the email first
+        via `POST /oauth2/methods/email/verify`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Verification required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationRequiredResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/email/verify:
+    post:
+      summary: Verify email with the code received after registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialVerifyRequest"
+      responses:
+        "200":
+          description: Email verified — redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/email/verify/resend:
+    post:
+      summary: Resend verification code
+      description: |
+        Rate-limited — subject to `verification.resend_interval` (default 60 s).
+        Returns `resend_failed` with description `"Resend too soon"` if called too early.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialVerifyResendRequest"
+      responses:
+        "200":
+          description: Code resent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/oauth/{provider}/start:
+    post:
+      summary: Initiate OAuth provider login (Google, GitHub, …)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthStartRequest"
+      responses:
+        "200":
+          description: Provider authorization URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthStartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/oauth/{provider}/callback:
+    get:
+      summary: OAuth provider callback (browser redirect)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: |
+            Redirects to `redirect_uri?code=...&state=...` on success,
+            or to `frontend.tfa_redirect_uri?tfa_session_id=...` when TFA is required.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/web3/start:
+    post:
+      summary: Initiate Web3/SIWE login — returns message to sign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Web3StartRequest"
+      responses:
+        "200":
+          description: SIWE message and its keccak256 hash
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Web3StartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/web3/consume:
+    post:
+      summary: Complete Web3 login by submitting the signed message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Web3ConsumeRequest"
+      responses:
+        "200":
+          description: Redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 
 components:
   responses:
@@ -360,6 +443,56 @@ components:
       bearerFormat: JWT
 
   schemas:
+    # ─── Common ───────────────────────────────────────────────────────────────
+
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+      required: [ok]
+
+    FieldError:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Field name
+        message:
+          type: string
+          description: Validation tag (e.g. required, email, password)
+      required: [reason, message]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - invalid_credentials
+            - registration_failed
+            - verification_failed
+            - resend_failed
+            - request_failed
+            - unsupported_response_type
+            - unsupported_grant_type
+            - server_error
+            - unauthorized
+        error_description:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+          description: Field-level validation errors
+      required: [error]
+
+    # ─── User ─────────────────────────────────────────────────────────────────
+
     CredentialResponse:
       type: object
       properties:
@@ -368,7 +501,8 @@ components:
           format: uuid
         type:
           type: string
-          enum: [email, phone]
+          description: "email | phone | web3 | oauth:{provider}"
+          example: email
         value:
           type: string
         verified:
@@ -383,10 +517,10 @@ components:
           format: uuid
         status:
           type: string
-          enum: [active, inactive, blocked]
+          enum: [active, blocked]
         tfa_method:
           type: string
-          enum: [none, totp]
+          enum: [none, email, phone, totp]
         created_at:
           type: string
           format: date-time
@@ -399,6 +533,8 @@ components:
             $ref: "#/components/schemas/CredentialResponse"
       required: [id, status, tfa_method, created_at, updated_at, credentials]
 
+    # ─── Auth flow ────────────────────────────────────────────────────────────
+
     AuthorizeInitResponse:
       type: object
       properties:
@@ -409,6 +545,150 @@ components:
         scope:
           type: string
       required: [auth_session_id, client_name, scope]
+
+    LoginRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [auth_session_id, email, password]
+
+    RegisterRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          description: Min 8 chars, must include uppercase, lowercase, digit, and special character
+      required: [auth_session_id, email, password]
+
+    LoginSuccessResponse:
+      type: object
+      properties:
+        redirect_url:
+          type: string
+          description: Full redirect URI with code and state query params
+      required: [redirect_url]
+
+    TFARequiredResponse:
+      type: object
+      properties:
+        tfa_required:
+          type: boolean
+          enum: [true]
+        tfa_session_id:
+          type: string
+        tfa_method:
+          type: string
+          enum: [email, phone, totp]
+        expires_in:
+          type: integer
+          description: TFA session TTL in seconds
+      required: [tfa_required, tfa_session_id, tfa_method, expires_in]
+
+    TFARequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        tfa_session_id:
+          type: string
+        code:
+          type: string
+      required: [auth_session_id, tfa_session_id, code]
+
+    # ─── Verification ─────────────────────────────────────────────────────────
+
+    VerificationRequiredResponse:
+      type: object
+      properties:
+        verification_required:
+          type: boolean
+          enum: [true]
+        verification_session_id:
+          type: string
+        verification_method:
+          type: string
+          enum: [email, phone]
+      required: [verification_required, verification_session_id, verification_method]
+
+    CredentialVerifyRequest:
+      type: object
+      properties:
+        auth_session_id:
+          type: string
+        verification_session_id:
+          type: string
+        code:
+          type: string
+      required: [auth_session_id, verification_session_id, code]
+
+    CredentialVerifyResendRequest:
+      type: object
+      properties:
+        verification_session_id:
+          type: string
+      required: [verification_session_id]
+
+    # ─── TOTP ─────────────────────────────────────────────────────────────────
+
+    TotpStartResponse:
+      type: object
+      properties:
+        provisioning_uri:
+          type: string
+          description: "otpauth://totp/... URI for QR code generation"
+        secret:
+          type: string
+          description: Base32-encoded TOTP secret (for manual entry)
+      required: [provisioning_uri, secret]
+
+    TotpConfirmRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 6-digit code from authenticator app
+      required: [code]
+
+    TotpConfirmResponse:
+      type: object
+      properties:
+        backup_codes:
+          type: array
+          items:
+            type: string
+          description: One-time backup codes (store securely)
+      required: [backup_codes]
+
+    # ─── TFA method ───────────────────────────────────────────────────────────
+
+    TfaMethodResponse:
+      type: object
+      properties:
+        method:
+          type: string
+          enum: [none, email, phone, totp]
+      required: [method]
+
+    TfaMethodRequest:
+      type: object
+      properties:
+        method:
+          type: string
+          enum: [none, email, phone, totp]
+      required: [method]
+
+    # ─── OAuth / Web3 ─────────────────────────────────────────────────────────
 
     OAuthStartRequest:
       type: object
@@ -459,65 +739,7 @@ components:
           description: Hex-encoded signature from wallet (personal_sign)
       required: [auth_session_id, message, signature]
 
-    RegisterRequest:
-      type: object
-      properties:
-        auth_session_id:
-          type: string
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          description: Min 8 chars, must include uppercase, lowercase, digit, and special character
-      required: [auth_session_id, email, password]
-
-    LoginRequest:
-      type: object
-      properties:
-        auth_session_id:
-          type: string
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-      required: [auth_session_id, email, password]
-
-    LoginSuccessResponse:
-      type: object
-      properties:
-        redirect_url:
-          type: string
-          description: Full redirect URI with code and state query params
-      required: [redirect_url]
-
-    TFARequiredResponse:
-      type: object
-      properties:
-        tfa_required:
-          type: boolean
-          enum: [true]
-        tfa_session_id:
-          type: string
-        tfa_method:
-          type: string
-          enum: [totp]
-        expires_in:
-          type: integer
-          description: TFA session TTL in seconds
-      required: [tfa_required, tfa_session_id, tfa_method, expires_in]
-
-    TFARequest:
-      type: object
-      properties:
-        auth_session_id:
-          type: string
-        tfa_session_id:
-          type: string
-        code:
-          type: string
-      required: [auth_session_id, tfa_session_id, code]
+    # ─── Token ────────────────────────────────────────────────────────────────
 
     TokenRequest:
       type: object
@@ -555,37 +777,3 @@ components:
         scope:
           type: string
       required: [access_token, token_type, expires_in, refresh_token]
-
-    FieldError:
-      type: object
-      properties:
-        reason:
-          type: string
-          description: Field name
-        message:
-          type: string
-          description: Validation tag (e.g. required, email, password)
-      required: [reason, message]
-
-    ErrorResponse:
-      type: object
-      properties:
-        error:
-          type: string
-          enum:
-            - invalid_request
-            - invalid_client
-            - invalid_grant
-            - invalid_credentials
-            - registration_failed
-            - unsupported_response_type
-            - unsupported_grant_type
-            - server_error
-        error_description:
-          type: string
-        errors:
-          type: array
-          items:
-            $ref: "#/components/schemas/FieldError"
-          description: Field-level validation errors, present when error is registration_failed
-      required: [error]

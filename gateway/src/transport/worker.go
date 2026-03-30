@@ -9,7 +9,7 @@ import (
 )
 
 type Worker interface {
-	Register(email, password string) (*TokenResult, error)
+	Register(email, password string) (*RegisterResult, error)
 	Login(email, password string) (*LoginResult, error)
 	TFAVerify(sessionID, code string) (*TokenResult, error)
 	RefreshToken(refreshToken string) (*TokenResult, error)
@@ -22,6 +22,16 @@ type Worker interface {
 	TotpUnlink(accessToken string) error
 	TfaMethodGet(accessToken string) (string, error)
 	TfaMethodSet(accessToken, method string) error
+	CredentialVerify(sessionID, code string) (*TokenResult, error)
+	CredentialVerifyResend(sessionID string) error
+}
+
+type RegisterResult struct {
+	AccessToken           string `json:"access_token"`
+	RefreshToken          string `json:"refresh_token"`
+	VerificationRequired  bool   `json:"verification_required"`
+	VerificationSessionID string `json:"verification_session_id"`
+	VerificationMethod    string `json:"verification_method"`
 }
 
 type TotpStartResult struct {
@@ -89,19 +99,19 @@ func NewWorkerClient(nc *nats.Conn, timeout time.Duration) *WorkerClient {
 	return &WorkerClient{nc: nc, timeout: timeout}
 }
 
-func (w *WorkerClient) Register(email, password string) (*TokenResult, error) {
+func (w *WorkerClient) Register(email, password string) (*RegisterResult, error) {
 	payload, _ := json.Marshal(map[string]string{"email": email, "password": password})
 	msg, err := w.nc.Request("auth.register", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker register: %w", err)
 	}
 
-	var result TokenResult
+	var result RegisterResult
 	if err := json.Unmarshal(msg.Data, &result); err != nil {
 		return nil, fmt.Errorf("worker register decode: %w", err)
 	}
 
-	if result.AccessToken == "" {
+	if !result.VerificationRequired && result.AccessToken == "" {
 		var e workerError
 		json.Unmarshal(msg.Data, &e)
 		if len(e.Errors) > 0 {
@@ -330,6 +340,43 @@ func (w *WorkerClient) TfaMethodSet(accessToken, method string) error {
 	msg, err := w.nc.Request("auth.tfa.method.set", payload, w.timeout)
 	if err != nil {
 		return fmt.Errorf("worker tfa.method.set: %w", err)
+	}
+
+	var e workerError
+	json.Unmarshal(msg.Data, &e)
+	if e.Message != "" {
+		return fmt.Errorf("%s", e.Message)
+	}
+
+	return nil
+}
+
+func (w *WorkerClient) CredentialVerify(sessionID, code string) (*TokenResult, error) {
+	payload, _ := json.Marshal(map[string]string{"session_id": sessionID, "code": code})
+	msg, err := w.nc.Request("auth.credential.verify", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker credential.verify: %w", err)
+	}
+
+	var result TokenResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker credential.verify decode: %w", err)
+	}
+
+	if result.AccessToken == "" {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) CredentialVerifyResend(sessionID string) error {
+	payload, _ := json.Marshal(map[string]string{"session_id": sessionID})
+	msg, err := w.nc.Request("auth.credential.verify.resend", payload, w.timeout)
+	if err != nil {
+		return fmt.Errorf("worker credential.verify.resend: %w", err)
 	}
 
 	var e workerError

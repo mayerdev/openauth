@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
+	"openauth/worker/utils"
 	"openauth/worker/utils/sessions"
 	"openauth/worker/utils/types"
 
@@ -33,20 +36,39 @@ func Refresh(msg *nats.Msg) {
 		return
 	}
 
-	sessionID, err := sessions.GenerateSessionID()
+	ctx := context.Background()
+
+	exists, err := sessions.SessionExists(ctx, claims.SessionID)
+	if err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+	if !exists {
+		msg.Respond(types.EmitError("Session expired", types.NoErrors))
+		return
+	}
+
+	_ = sessions.DeleteSession(ctx, claims.SessionID)
+
+	newSessionID, err := sessions.GenerateSessionID()
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	accessToken, err := sessions.GenerateAccessToken(claims.UserID, sessionID)
+	accessToken, err := sessions.GenerateAccessToken(claims.UserID, newSessionID)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	refreshToken, err := sessions.GenerateRefreshToken(claims.UserID, sessionID)
+	refreshToken, err := sessions.GenerateRefreshToken(claims.UserID, newSessionID)
 	if err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
+	if err := sessions.SaveSession(ctx, newSessionID, claims.UserID, time.Duration(utils.Config.JWT.RefreshTokenTTL)*time.Second); err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}

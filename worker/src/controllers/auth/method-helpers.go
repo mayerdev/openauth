@@ -39,8 +39,12 @@ func FindOrCreateByCredential(credType, value string, bypassTFA bool) (*FindOrCr
 				return err
 			}
 
-			_, err := credentials.UpsertCredential(tx, newUser.ID, credType, value)
-			return err
+			cred, err := credentials.UpsertCredential(tx, newUser.ID, credType, value)
+			if err != nil {
+				return err
+			}
+
+			return tx.Model(cred).Update("verified", true).Error
 		}); err != nil {
 			return nil, errors.New("internal error")
 		}

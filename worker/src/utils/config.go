@@ -33,6 +33,12 @@ type ConfigFile struct {
 		AccessTokenTTL  int    `mapstructure:"access_token_ttl"`
 		RefreshTokenTTL int    `mapstructure:"refresh_token_ttl"`
 	} `mapstructure:"jwt"`
+
+	Verification struct {
+		CodeTTL        int `mapstructure:"code_ttl"`
+		ResendInterval int `mapstructure:"resend_interval"`
+		MaxAttempts    int `mapstructure:"max_attempts"`
+	} `mapstructure:"verification"`
 }
 
 var Config ConfigFile
@@ -60,6 +66,10 @@ func LoadConfig() {
 
 	viper.SetDefault("jwt.access_token_ttl", 21600)
 	viper.SetDefault("jwt.refresh_token_ttl", 604800)
+
+	viper.SetDefault("verification.code_ttl", 900)
+	viper.SetDefault("verification.resend_interval", 60)
+	viper.SetDefault("verification.max_attempts", 5)
 
 	viper.SetEnvPrefix("APP")
 	viper.AutomaticEnv()

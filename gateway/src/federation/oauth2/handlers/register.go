@@ -41,5 +41,13 @@ func (h *RegisterHandler) PostRegister(c fiber.Ctx) error {
 		return c.Status(400).JSON(resp)
 	}
 
+	if result.VerificationRequired {
+		return c.JSON(VerificationRequiredResponse{
+			VerificationRequired:  true,
+			VerificationSessionID: result.VerificationSessionID,
+			VerificationMethod:    result.VerificationMethod,
+		})
+	}
+
 	return issueCodeAndRedirect(c, h.sessions, h.codes, sess, req.AuthSessionID, result.AccessToken, result.RefreshToken)
 }

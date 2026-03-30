@@ -60,6 +60,22 @@ type TokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
+type VerificationRequiredResponse struct {
+	VerificationRequired  bool   `json:"verification_required"`
+	VerificationSessionID string `json:"verification_session_id"`
+	VerificationMethod    string `json:"verification_method"`
+}
+
+type CredentialVerifyRequest struct {
+	AuthSessionID         string `json:"auth_session_id"`
+	VerificationSessionID string `json:"verification_session_id"`
+	Code                  string `json:"code"`
+}
+
+type CredentialVerifyResendRequest struct {
+	VerificationSessionID string `json:"verification_session_id"`
+}
+
 type FieldError struct {
 	Reason  string `json:"reason"`
 	Message string `json:"message"`

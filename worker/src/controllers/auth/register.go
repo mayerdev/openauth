@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand"
 	"time"
 
 	"openauth/worker/models"
 	"openauth/worker/utils"
 	"openauth/worker/utils/credentials"
+	"openauth/worker/utils/sender"
 	"openauth/worker/utils/sessions"
 	"openauth/worker/utils/types"
 
@@ -71,42 +74,36 @@ func Register(msg *nats.Msg) {
 		}
 
 		_, err := credentials.UpsertCredential(tx, user.ID, credentials.CredentialTypeEmail, req.Email)
-
 		return err
 	}); err != nil {
-		msg.Respond(types.EmitError("Internal error", types.NoErrors))
-
-		return
-	}
-
-	sessionID, err := sessions.GenerateSessionID()
-	if err != nil {
-		msg.Respond(types.EmitError("Internal error", types.NoErrors))
-		return
-	}
-
-	accessToken, err := sessions.GenerateAccessToken(user.ID, sessionID)
-	if err != nil {
-		msg.Respond(types.EmitError("Internal error", types.NoErrors))
-		return
-	}
-
-	refreshToken, err := sessions.GenerateRefreshToken(user.ID, sessionID)
-	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
 	ctx := context.Background()
-	if err := sessions.SaveSession(ctx, sessionID, user.ID, time.Duration(utils.Config.JWT.RefreshTokenTTL)*time.Second); err != nil {
+	codeTTL := time.Duration(utils.Config.Verification.CodeTTL) * time.Second
+
+	verificationSessionID, err := sessions.CreateVerificationSession(ctx, user.ID, credentials.CredentialTypeEmail, req.Email, codeTTL)
+	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	data, _ := json.Marshal(AuthResult{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	})
+	code := fmt.Sprintf("%06d", rand.Intn(1000000))
 
+	if err := sessions.StoreVerificationCode(ctx, verificationSessionID, user.ID, code, credentials.CredentialTypeEmail, codeTTL); err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
+	_ = sessions.CheckAndSetResendInterval(ctx, verificationSessionID)
+
+	sender.SendCode(utils.Nats, "email", req.Email, code)
+
+	data, _ := json.Marshal(VerificationRequiredResult{
+		VerificationRequired:  true,
+		VerificationSessionID: verificationSessionID,
+		VerificationMethod:    "email",
+	})
 	msg.Respond(data)
 }

@@ -11,3 +11,9 @@ type TfaRequiredResult struct {
 	TfaMethod    string `json:"tfa_method"`
 	ExpiresIn    int    `json:"expires_in"`
 }
+
+type VerificationRequiredResult struct {
+	VerificationRequired  bool   `json:"verification_required"`
+	VerificationSessionID string `json:"verification_session_id"`
+	VerificationMethod    string `json:"verification_method"`
+}
