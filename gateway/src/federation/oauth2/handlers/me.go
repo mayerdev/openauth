@@ -15,20 +15,6 @@ func NewMeHandler(worker transport.Worker) *MeHandler {
 	return &MeHandler{worker: worker}
 }
 
-func (h *MeHandler) GetMe(c fiber.Ctx) error {
-	token, ok := bearerToken(c)
-	if !ok {
-		return c.Status(401).JSON(ErrorResponse{Error: "unauthorized"})
-	}
-
-	result, err := h.worker.Verify(token)
-	if err != nil {
-		return c.Status(401).JSON(ErrorResponse{Error: "unauthorized", ErrorDescription: err.Error()})
-	}
-
-	return c.JSON(result)
-}
-
 func (h *MeHandler) PostLogout(c fiber.Ctx) error {
 	token, ok := bearerToken(c)
 	if !ok {

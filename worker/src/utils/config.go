@@ -39,6 +39,10 @@ type ConfigFile struct {
 		ResendInterval int `mapstructure:"resend_interval"`
 		MaxAttempts    int `mapstructure:"max_attempts"`
 	} `mapstructure:"verification"`
+
+	Auth struct {
+		DefaultRole string `mapstructure:"default_role"`
+	} `mapstructure:"auth"`
 }
 
 var Config ConfigFile
@@ -70,6 +74,8 @@ func LoadConfig() {
 	viper.SetDefault("verification.code_ttl", 900)
 	viper.SetDefault("verification.resend_interval", 60)
 	viper.SetDefault("verification.max_attempts", 5)
+
+	viper.SetDefault("auth.default_role", "user")
 
 	viper.SetEnvPrefix("APP")
 	viper.AutomaticEnv()

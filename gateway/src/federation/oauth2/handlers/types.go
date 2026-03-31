@@ -10,14 +10,19 @@ type AuthorizeQueryParams struct {
 
 type RegisterRequest struct {
 	AuthSessionID string `json:"auth_session_id"`
-	Email         string `json:"email"`
+	Email         string `json:"email,omitempty"`
+	Phone         string `json:"phone,omitempty"`
 	Password      string `json:"password"`
 }
 
 type LoginRequest struct {
 	AuthSessionID string `json:"auth_session_id"`
-	Email         string `json:"email"`
-	Password      string `json:"password"`
+	Method        string `json:"method,omitempty"`
+	Email         string `json:"email,omitempty"`
+	Phone         string `json:"phone,omitempty"`
+	Password      string `json:"password,omitempty"`
+	TFASessionID  string `json:"tfa_session_id,omitempty"`
+	Code          string `json:"code,omitempty"`
 }
 
 type TFARequest struct {
@@ -85,4 +90,29 @@ type ErrorResponse struct {
 	Error            string       `json:"error"`
 	ErrorDescription string       `json:"error_description,omitempty"`
 	Errors           []FieldError `json:"errors,omitempty"`
+}
+
+type IntrospectRequest struct {
+	Token        string `json:"token"         form:"token"`
+	ClientID     string `json:"client_id"     form:"client_id"`
+	ClientSecret string `json:"client_secret" form:"client_secret"`
+}
+
+type IntrospectCredential struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Value    string `json:"value"`
+	Verified bool   `json:"verified"`
+}
+
+type IntrospectResponse struct {
+	Active      bool                   `json:"active"`
+	Sub         string                 `json:"sub,omitempty"`
+	Username    string                 `json:"username,omitempty"`
+	Roles       []string               `json:"roles,omitempty"`
+	Credentials []IntrospectCredential `json:"credentials,omitempty"`
+	Scope       string                 `json:"scope,omitempty"`
+	TokenType   string                 `json:"token_type,omitempty"`
+	Exp         int64                  `json:"exp,omitempty"`
+	Iat         int64                  `json:"iat,omitempty"`
 }

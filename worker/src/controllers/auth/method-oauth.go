@@ -14,6 +14,7 @@ type OAuthMethodRequest struct {
 	ProviderID string `json:"provider_id" validate:"required"`
 	Email      string `json:"email"`
 	Name       string `json:"name"`
+	Scope      string `json:"scope"`
 }
 
 func OAuthMethod(msg *nats.Msg) {
@@ -32,6 +33,7 @@ func OAuthMethod(msg *nats.Msg) {
 		credentials.CredentialTypeOAuth(req.Provider),
 		req.ProviderID,
 		false,
+		req.Scope,
 	)
 
 	if err != nil {

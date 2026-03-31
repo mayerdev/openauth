@@ -31,7 +31,6 @@ func Setup() *fiber.App {
 	totp := handlers.NewTotpHandler(worker)
 
 	api := app.Group("/api")
-	api.Get("/me", me.GetMe)
 	api.Post("/logout", me.PostLogout)
 	api.Post("/totp/start", totp.PostTotpStart)
 	api.Post("/totp/confirm", totp.PostTotpConfirm)

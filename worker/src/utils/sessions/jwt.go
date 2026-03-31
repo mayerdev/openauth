@@ -17,6 +17,7 @@ var ErrTokenExpired = jwt.ErrTokenExpired
 type TokenClaims struct {
 	UserID    uuid.UUID `json:"user_id"`
 	SessionID string    `json:"session_id"`
+	Scope     string    `json:"scope,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -29,10 +30,11 @@ func GenerateSessionID() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func GenerateAccessToken(userID uuid.UUID, sessionID string) (string, error) {
+func GenerateAccessToken(userID uuid.UUID, sessionID, scope string) (string, error) {
 	claims := TokenClaims{
 		UserID:    userID,
 		SessionID: sessionID,
+		Scope:     scope,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(utils.Config.JWT.AccessTokenTTL) * time.Second)),
 		},
@@ -41,10 +43,11 @@ func GenerateAccessToken(userID uuid.UUID, sessionID string) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(utils.Config.JWT.Secret))
 }
 
-func GenerateRefreshToken(userID uuid.UUID, sessionID string) (string, error) {
+func GenerateRefreshToken(userID uuid.UUID, sessionID, scope string) (string, error) {
 	claims := TokenClaims{
 		UserID:    userID,
 		SessionID: sessionID,
+		Scope:     scope,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(utils.Config.JWT.RefreshTokenTTL) * time.Second)),
 		},

@@ -56,13 +56,13 @@ func Refresh(msg *nats.Msg) {
 		return
 	}
 
-	accessToken, err := sessions.GenerateAccessToken(claims.UserID, newSessionID)
+	accessToken, err := sessions.GenerateAccessToken(claims.UserID, newSessionID, claims.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	refreshToken, err := sessions.GenerateRefreshToken(claims.UserID, newSessionID)
+	refreshToken, err := sessions.GenerateRefreshToken(claims.UserID, newSessionID, claims.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return

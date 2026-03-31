@@ -24,7 +24,7 @@ type FindOrCreateResult struct {
 	TFAMethod    string
 }
 
-func FindOrCreateByCredential(credType, value string, bypassTFA bool) (*FindOrCreateResult, error) {
+func FindOrCreateByCredential(credType, value string, bypassTFA bool, scope string) (*FindOrCreateResult, error) {
 	ctx := context.Background()
 
 	user, _, err := credentials.FindUserByCredential(utils.Database, credType, value)
@@ -96,12 +96,12 @@ func FindOrCreateByCredential(credType, value string, bypassTFA bool) (*FindOrCr
 		return nil, errors.New("internal error")
 	}
 
-	accessToken, err := sessions.GenerateAccessToken(user.ID, sessionID)
+	accessToken, err := sessions.GenerateAccessToken(user.ID, sessionID, scope)
 	if err != nil {
 		return nil, errors.New("internal error")
 	}
 
-	refreshToken, err := sessions.GenerateRefreshToken(user.ID, sessionID)
+	refreshToken, err := sessions.GenerateRefreshToken(user.ID, sessionID, scope)
 	if err != nil {
 		return nil, errors.New("internal error")
 	}

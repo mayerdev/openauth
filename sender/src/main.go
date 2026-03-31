@@ -32,6 +32,7 @@ func main() {
 			log.Error().Err(err).Msg("email: failed to decode message")
 			return
 		}
+
 		log.Info().Str("to", payload["to"]).Str("code", payload["code"]).Msg("email")
 	})
 
@@ -41,6 +42,7 @@ func main() {
 			log.Error().Err(err).Msg("sms: failed to decode message")
 			return
 		}
+
 		log.Info().Str("to", payload["to"]).Str("code", payload["code"]).Msg("sms")
 	})
 

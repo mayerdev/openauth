@@ -92,7 +92,26 @@ func (h *LoginHandler) PostAuthorize(c fiber.Ctx) error {
 		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "invalid auth_session_id"})
 	}
 
-	result, err := h.worker.Login(req.Email, req.Password)
+	// TFA step: tfa_session_id + code present
+	if req.TFASessionID != "" && req.Code != "" {
+		tokens, err := h.worker.TFAVerify(req.TFASessionID, req.Code, sess.Scope)
+		if err != nil {
+			return c.Status(401).JSON(ErrorResponse{Error: "invalid_grant", ErrorDescription: err.Error()})
+		}
+		return h.issueCodeAndRedirect(c, sess, req.AuthSessionID, tokens.AccessToken, tokens.RefreshToken)
+	}
+
+	// Login step
+	method := req.Method
+	if method == "" {
+		method = "email"
+	}
+	identifier := req.Email
+	if method == "phone" {
+		identifier = req.Phone
+	}
+
+	result, err := h.worker.Login(method, identifier, req.Password, sess.Scope)
 	if err != nil {
 		return c.Status(401).JSON(ErrorResponse{Error: "invalid_credentials", ErrorDescription: err.Error()})
 	}

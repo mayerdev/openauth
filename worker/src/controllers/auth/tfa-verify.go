@@ -19,6 +19,7 @@ import (
 type TfaVerifyRequest struct {
 	SessionID string `json:"session_id" validate:"required"`
 	Code      string `json:"code" validate:"required"`
+	Scope     string `json:"scope"`
 }
 
 func TfaVerify(msg *nats.Msg) {
@@ -118,13 +119,13 @@ func TfaVerify(msg *nats.Msg) {
 		return
 	}
 
-	accessToken, err := sessions.GenerateAccessToken(userID, sessionID)
+	accessToken, err := sessions.GenerateAccessToken(userID, sessionID, req.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	refreshToken, err := sessions.GenerateRefreshToken(userID, sessionID)
+	refreshToken, err := sessions.GenerateRefreshToken(userID, sessionID, req.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return

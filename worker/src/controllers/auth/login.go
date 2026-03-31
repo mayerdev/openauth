@@ -20,8 +20,11 @@ import (
 )
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
+	Method   string `json:"method"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
 	Password string `json:"password" validate:"required,password"`
+	Scope    string `json:"scope"`
 }
 
 func Login(msg *nats.Msg) {
@@ -32,6 +35,10 @@ func Login(msg *nats.Msg) {
 		return
 	}
 
+	if req.Method == "" {
+		req.Method = "email"
+	}
+
 	if err := utils.Validator.Struct(&req); err != nil {
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
@@ -39,22 +46,42 @@ func Login(msg *nats.Msg) {
 			for i, fe := range ve {
 				fieldErrors[i] = types.Error{Reason: fe.Field(), Message: fe.Tag()}
 			}
-
 			msg.Respond(types.EmitError("Validation error", fieldErrors))
 			return
 		}
-
 		msg.Respond(types.EmitError("Validation error", types.NoErrors))
 		return
 	}
 
-	user, allCreds, err := credentials.FindUserByCredential(utils.Database, credentials.CredentialTypeEmail, req.Email)
+	var (
+		credType  string
+		credValue string
+	)
+
+	switch req.Method {
+	case "phone":
+		phone, err := credentials.NormalizePhone(req.Phone)
+		if err != nil {
+			msg.Respond(types.EmitError("Invalid phone number", types.NoErrors))
+			return
+		}
+		credType = credentials.CredentialTypePhone
+		credValue = phone
+	default:
+		if req.Email == "" {
+			msg.Respond(types.EmitError("Email is required", types.NoErrors))
+			return
+		}
+		credType = credentials.CredentialTypeEmail
+		credValue = req.Email
+	}
+
+	user, allCreds, err := credentials.FindUserByCredential(utils.Database, credType, credValue)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			msg.Respond(types.EmitError("Invalid credentials", types.NoErrors))
 			return
 		}
-
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
@@ -117,13 +144,13 @@ func Login(msg *nats.Msg) {
 		return
 	}
 
-	accessToken, err := sessions.GenerateAccessToken(user.ID, sessionID)
+	accessToken, err := sessions.GenerateAccessToken(user.ID, sessionID, req.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	refreshToken, err := sessions.GenerateRefreshToken(user.ID, sessionID)
+	refreshToken, err := sessions.GenerateRefreshToken(user.ID, sessionID, req.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return

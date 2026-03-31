@@ -9,21 +9,22 @@ import (
 )
 
 type Worker interface {
-	Register(email, password string) (*RegisterResult, error)
-	Login(email, password string) (*LoginResult, error)
-	TFAVerify(sessionID, code string) (*TokenResult, error)
+	Register(method, identifier, password string) (*RegisterResult, error)
+	Login(method, identifier, password, scope string) (*LoginResult, error)
+	TFAVerify(sessionID, code, scope string) (*TokenResult, error)
 	RefreshToken(refreshToken string) (*TokenResult, error)
 	Verify(accessToken string) (*UserResult, error)
 	Logout(accessToken string) error
-	OAuthMethod(provider, providerID, email, name string) (*LoginResult, error)
-	Web3Method(address string) (*TokenResult, error)
+	OAuthMethod(provider, providerID, email, name, scope string) (*LoginResult, error)
+	Web3Method(address, scope string) (*TokenResult, error)
 	TotpStart(accessToken string) (*TotpStartResult, error)
 	TotpConfirm(accessToken, code string) (*TotpConfirmResult, error)
 	TotpUnlink(accessToken string) error
 	TfaMethodGet(accessToken string) (string, error)
 	TfaMethodSet(accessToken, method string) error
-	CredentialVerify(sessionID, code string) (*TokenResult, error)
+	CredentialVerify(sessionID, code, scope string) (*TokenResult, error)
 	CredentialVerifyResend(sessionID string) error
+	ListRoles(userID string) ([]string, error)
 }
 
 type RegisterResult struct {
@@ -99,8 +100,14 @@ func NewWorkerClient(nc *nats.Conn, timeout time.Duration) *WorkerClient {
 	return &WorkerClient{nc: nc, timeout: timeout}
 }
 
-func (w *WorkerClient) Register(email, password string) (*RegisterResult, error) {
-	payload, _ := json.Marshal(map[string]string{"email": email, "password": password})
+func (w *WorkerClient) Register(method, identifier, password string) (*RegisterResult, error) {
+	m := map[string]string{"method": method, "password": password}
+	if method == "phone" {
+		m["phone"] = identifier
+	} else {
+		m["email"] = identifier
+	}
+	payload, _ := json.Marshal(m)
 	msg, err := w.nc.Request("auth.register", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker register: %w", err)
@@ -123,8 +130,14 @@ func (w *WorkerClient) Register(email, password string) (*RegisterResult, error)
 	return &result, nil
 }
 
-func (w *WorkerClient) Login(email, password string) (*LoginResult, error) {
-	payload, _ := json.Marshal(map[string]string{"email": email, "password": password})
+func (w *WorkerClient) Login(method, identifier, password, scope string) (*LoginResult, error) {
+	m := map[string]string{"method": method, "password": password, "scope": scope}
+	if method == "phone" {
+		m["phone"] = identifier
+	} else {
+		m["email"] = identifier
+	}
+	payload, _ := json.Marshal(m)
 	msg, err := w.nc.Request("auth.login", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker login: %w", err)
@@ -144,8 +157,8 @@ func (w *WorkerClient) Login(email, password string) (*LoginResult, error) {
 	return &result, nil
 }
 
-func (w *WorkerClient) TFAVerify(sessionID, code string) (*TokenResult, error) {
-	payload, _ := json.Marshal(map[string]string{"session_id": sessionID, "code": code})
+func (w *WorkerClient) TFAVerify(sessionID, code, scope string) (*TokenResult, error) {
+	payload, _ := json.Marshal(map[string]string{"session_id": sessionID, "code": code, "scope": scope})
 	msg, err := w.nc.Request("auth.tfa.verify", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker tfa.verify: %w", err)
@@ -207,12 +220,13 @@ func (w *WorkerClient) Verify(accessToken string) (*UserResult, error) {
 	return &result, nil
 }
 
-func (w *WorkerClient) OAuthMethod(provider, providerID, email, name string) (*LoginResult, error) {
+func (w *WorkerClient) OAuthMethod(provider, providerID, email, name, scope string) (*LoginResult, error) {
 	payload, _ := json.Marshal(map[string]string{
 		"provider":    provider,
 		"provider_id": providerID,
 		"email":       email,
 		"name":        name,
+		"scope":       scope,
 	})
 
 	msg, err := w.nc.Request("auth.method.oauth", payload, w.timeout)
@@ -234,8 +248,8 @@ func (w *WorkerClient) OAuthMethod(provider, providerID, email, name string) (*L
 	return &result, nil
 }
 
-func (w *WorkerClient) Web3Method(address string) (*TokenResult, error) {
-	payload, _ := json.Marshal(map[string]string{"address": address})
+func (w *WorkerClient) Web3Method(address, scope string) (*TokenResult, error) {
+	payload, _ := json.Marshal(map[string]string{"address": address, "scope": scope})
 	msg, err := w.nc.Request("auth.method.web3", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker method.web3: %w", err)
@@ -351,8 +365,8 @@ func (w *WorkerClient) TfaMethodSet(accessToken, method string) error {
 	return nil
 }
 
-func (w *WorkerClient) CredentialVerify(sessionID, code string) (*TokenResult, error) {
-	payload, _ := json.Marshal(map[string]string{"session_id": sessionID, "code": code})
+func (w *WorkerClient) CredentialVerify(sessionID, code, scope string) (*TokenResult, error) {
+	payload, _ := json.Marshal(map[string]string{"session_id": sessionID, "code": code, "scope": scope})
 	msg, err := w.nc.Request("auth.credential.verify", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker credential.verify: %w", err)
@@ -386,6 +400,27 @@ func (w *WorkerClient) CredentialVerifyResend(sessionID string) error {
 	}
 
 	return nil
+}
+
+func (w *WorkerClient) ListRoles(userID string) ([]string, error) {
+	payload, _ := json.Marshal(map[string]string{"user_id": userID})
+	msg, err := w.nc.Request("auth.roles.list", payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker roles.list: %w", err)
+	}
+
+	var result struct {
+		Roles []string `json:"roles"`
+	}
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker roles.list decode: %w", err)
+	}
+
+	if result.Roles == nil {
+		return []string{}, nil
+	}
+
+	return result.Roles, nil
 }
 
 func (w *WorkerClient) Logout(accessToken string) error {

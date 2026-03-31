@@ -6,21 +6,6 @@ info:
 paths:
   # ─── User API (authenticated) ────────────────────────────────────────────────
 
-  /api/me:
-    get:
-      summary: Get current user info and credentials
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: User info with credentials
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
   /api/logout:
     post:
       summary: Invalidate current session
@@ -174,7 +159,13 @@ paths:
           $ref: "#/components/responses/BadRequest"
 
     post:
-      summary: Submit email/password credentials
+      summary: Submit credentials (login step) or TFA code (TFA step)
+      description: |
+        **Login step:** provide `method` + credentials + `password`.
+        If TFA is enabled, returns `tfa_required: true` with `tfa_session_id`.
+
+        **TFA step:** provide `auth_session_id` + `tfa_session_id` + `code`.
+        Completes authentication and returns the redirect URL.
       requestBody:
         required: true
         content:
@@ -195,22 +186,30 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /oauth2/tfa:
+  /oauth2/introspect:
     post:
-      summary: Submit TFA code (TOTP, email, or phone)
+      summary: Introspect a token (RFC 7662)
+      description: |
+        Validates an access token and returns its metadata.
+        Requires client credentials (`client_id` + `client_secret`).
+        Returns `{ "active": false }` for invalid, expired, or revoked tokens.
+        Intended for use by resource servers (e.g. Spring Security OAuth2).
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TFARequest"
+              $ref: "#/components/schemas/IntrospectRequest"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/IntrospectRequest"
       responses:
         "200":
-          description: Redirect URL with authorization code
+          description: Token metadata (active or inactive)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LoginSuccessResponse"
+                $ref: "#/components/schemas/IntrospectResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -241,27 +240,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
   # ─── Auth Methods ─────────────────────────────────────────────────────────────
-
-  /oauth2/methods/email/login:
-    post:
-      summary: Login with email and password
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-      responses:
-        "200":
-          description: Redirect URL or TFA challenge
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: "#/components/schemas/LoginSuccessResponse"
-                  - $ref: "#/components/schemas/TFARequiredResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
 
   /oauth2/methods/email/register:
     post:
@@ -308,6 +286,70 @@ paths:
   /oauth2/methods/email/verify/resend:
     post:
       summary: Resend verification code
+      description: |
+        Rate-limited — subject to `verification.resend_interval` (default 60 s).
+        Returns `resend_failed` with description `"Resend too soon"` if called too early.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialVerifyResendRequest"
+      responses:
+        "200":
+          description: Code resent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/phone/register:
+    post:
+      summary: Register with phone number and password
+      description: |
+        Creates a new account and sends a verification code via SMS.
+        Tokens are NOT issued immediately — verify phone first via
+        `POST /oauth2/methods/phone/verify`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Verification required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationRequiredResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/phone/verify:
+    post:
+      summary: Verify phone number with the SMS code received after registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialVerifyRequest"
+      responses:
+        "200":
+          description: Phone verified — redirect URL with authorization code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /oauth2/methods/phone/verify/resend:
+    post:
+      summary: Resend SMS verification code
       description: |
         Rate-limited — subject to `verification.resend_interval` (default 60 s).
         Returns `resend_failed` with description `"Resend too soon"` if called too early.
@@ -509,30 +551,6 @@ components:
           type: boolean
       required: [id, type, value, verified]
 
-    UserResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [active, blocked]
-        tfa_method:
-          type: string
-          enum: [none, email, phone, totp]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        credentials:
-          type: array
-          items:
-            $ref: "#/components/schemas/CredentialResponse"
-      required: [id, status, tfa_method, created_at, updated_at, credentials]
-
     # ─── Auth flow ────────────────────────────────────────────────────────────
 
     AuthorizeInitResponse:
@@ -548,15 +566,34 @@ components:
 
     LoginRequest:
       type: object
+      description: |
+        Used for both the **login step** and the **TFA step** of `POST /oauth2/authorize`.
+
+        **Login step:** provide `method` + `email`/`phone` + `password`.
+        **TFA step:** provide `tfa_session_id` + `code` (omit credentials).
       properties:
         auth_session_id:
           type: string
+        method:
+          type: string
+          enum: [email, phone]
+          default: email
         email:
           type: string
           format: email
+        phone:
+          type: string
+          example: "+15551234567"
+          description: Phone in E.164 format (login step, method=phone)
         password:
           type: string
-      required: [auth_session_id, email, password]
+        tfa_session_id:
+          type: string
+          description: From TFARequiredResponse — present only in TFA step
+        code:
+          type: string
+          description: TFA code (TOTP / email OTP / SMS OTP) — present only in TFA step
+      required: [auth_session_id]
 
     RegisterRequest:
       type: object
@@ -566,10 +603,15 @@ components:
         email:
           type: string
           format: email
+          description: Required for email registration
+        phone:
+          type: string
+          example: "+15551234567"
+          description: Required for phone registration (E.164 format)
         password:
           type: string
           description: Min 8 chars, must include uppercase, lowercase, digit, and special character
-      required: [auth_session_id, email, password]
+      required: [auth_session_id, password]
 
     LoginSuccessResponse:
       type: object
@@ -594,17 +636,6 @@ components:
           type: integer
           description: TFA session TTL in seconds
       required: [tfa_required, tfa_session_id, tfa_method, expires_in]
-
-    TFARequest:
-      type: object
-      properties:
-        auth_session_id:
-          type: string
-        tfa_session_id:
-          type: string
-        code:
-          type: string
-      required: [auth_session_id, tfa_session_id, code]
 
     # ─── Verification ─────────────────────────────────────────────────────────
 
@@ -777,3 +808,57 @@ components:
         scope:
           type: string
       required: [access_token, token_type, expires_in, refresh_token]
+
+    # ─── Introspect (RFC 7662) ────────────────────────────────────────────────
+
+    IntrospectRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: The access token to introspect
+        client_id:
+          type: string
+        client_secret:
+          type: string
+      required: [token, client_id, client_secret]
+
+    IntrospectResponse:
+      type: object
+      properties:
+        active:
+          type: boolean
+          description: Whether the token is valid and not expired/revoked
+        sub:
+          type: string
+          format: uuid
+          description: User ID
+        username:
+          type: string
+          description: Primary verified email of the user
+        roles:
+          type: array
+          items:
+            type: string
+          description: Casbin roles assigned to the user
+          example: ["admin", "editor"]
+        credentials:
+          type: array
+          items:
+            $ref: "#/components/schemas/CredentialResponse"
+          description: Present only when the token scope includes "credentials"
+        scope:
+          type: string
+          example: openid credentials
+        token_type:
+          type: string
+          enum: [Bearer]
+        exp:
+          type: integer
+          format: int64
+          description: Token expiration (Unix timestamp)
+        iat:
+          type: integer
+          format: int64
+          description: Token issued-at (Unix timestamp)
+      required: [active]

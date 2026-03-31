@@ -12,6 +12,7 @@ import (
 
 type Web3MethodRequest struct {
 	Address string `json:"address" validate:"required"`
+	Scope   string `json:"scope"`
 }
 
 func Web3Method(msg *nats.Msg) {
@@ -30,6 +31,7 @@ func Web3Method(msg *nats.Msg) {
 		credentials.CredentialTypeWeb3,
 		strings.ToLower(req.Address),
 		true,
+		req.Scope,
 	)
 
 	if err != nil {

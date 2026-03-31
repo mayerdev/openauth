@@ -1,11 +1,30 @@
 package credentials
 
 import (
+	"errors"
+	"strings"
+	"unicode"
+
 	"openauth/worker/models"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+func NormalizePhone(raw string) (string, error) {
+	var digits strings.Builder
+	for _, ch := range raw {
+		if unicode.IsDigit(ch) {
+			digits.WriteRune(ch)
+		}
+	}
+
+	if digits.Len() < 7 {
+		return "", errors.New("invalid phone number")
+	}
+
+	return "+" + digits.String(), nil
+}
 
 type CredentialType = string
 

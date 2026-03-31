@@ -28,7 +28,16 @@ func (h *RegisterHandler) PostRegister(c fiber.Ctx) error {
 		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "invalid auth_session_id"})
 	}
 
-	result, err := h.worker.Register(req.Email, req.Password)
+	method := c.Params("method")
+	if method == "" {
+		method = "email"
+	}
+	identifier := req.Email
+	if method == "phone" {
+		identifier = req.Phone
+	}
+
+	result, err := h.worker.Register(method, identifier, req.Password)
 	if err != nil {
 		resp := ErrorResponse{Error: "registration_failed", ErrorDescription: err.Error()}
 		var ve *transport.WorkerValidationError

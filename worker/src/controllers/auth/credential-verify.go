@@ -20,6 +20,7 @@ import (
 type CredentialVerifyRequest struct {
 	SessionID string `json:"session_id"`
 	Code      string `json:"code"`
+	Scope     string `json:"scope"`
 }
 
 type CredentialVerifyResendRequest struct {
@@ -73,13 +74,13 @@ func CredentialVerify(msg *nats.Msg) {
 		return
 	}
 
-	accessToken, err := sessions.GenerateAccessToken(userID, sessionID)
+	accessToken, err := sessions.GenerateAccessToken(userID, sessionID, req.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
 
-	refreshToken, err := sessions.GenerateRefreshToken(userID, sessionID)
+	refreshToken, err := sessions.GenerateRefreshToken(userID, sessionID, req.Scope)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
