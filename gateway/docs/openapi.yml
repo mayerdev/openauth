@@ -657,10 +657,13 @@ components:
       properties:
         auth_session_id:
           type: string
+          description: "Required for continuing the OAuth2 flow to identify the authorization context."
         verification_session_id:
           type: string
+          description: "The session ID received from the registration step."
         code:
           type: string
+          description: "The 6-digit verification code sent to email or phone."
       required: [auth_session_id, verification_session_id, code]
 
     CredentialVerifyResendRequest:

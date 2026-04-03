@@ -10,11 +10,14 @@ import (
 
 	"openauth/worker/models"
 	"openauth/worker/utils"
+	casbinutil "openauth/worker/utils/casbin"
+	"openauth/worker/utils/credentials"
 	"openauth/worker/utils/sender"
 	"openauth/worker/utils/sessions"
 	"openauth/worker/utils/types"
 
 	"github.com/nats-io/nats.go"
+	"gorm.io/gorm"
 )
 
 type CredentialVerifyRequest struct {
@@ -35,8 +38,7 @@ func CredentialVerify(msg *nats.Msg) {
 	}
 
 	ctx := context.Background()
-
-	userID, credType, _, err := sessions.GetVerificationSession(ctx, req.SessionID)
+	userID, credType, credValue, payload, err := sessions.GetVerificationSession(ctx, req.SessionID)
 	if err != nil {
 		msg.Respond(types.EmitError("Invalid session", types.NoErrors))
 		return
@@ -58,11 +60,39 @@ func CredentialVerify(msg *nats.Msg) {
 		return
 	}
 
-	if err := utils.Database.Model(&models.UserCredential{}).
-		Where("user_id = ? AND type = ?", userID, credType).
-		Update("verified", true).Error; err != nil {
-		msg.Respond(types.EmitError("Internal error", types.NoErrors))
-		return
+	if password, ok := payload["password"]; ok {
+		if err := utils.Database.Transaction(func(tx *gorm.DB) error {
+			user := models.User{Password: password}
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+
+			cred, err := credentials.UpsertCredential(tx, user.ID, credType, credValue)
+			if err != nil {
+				return err
+			}
+
+			if err := tx.Model(cred).Update("verified", true).Error; err != nil {
+				return err
+			}
+
+			userID = user.ID
+
+			if role := utils.Config.Auth.DefaultRole; role != "" {
+				_, _ = casbinutil.Enforcer.AddRoleForUser(user.ID.String(), role)
+			}
+			return nil
+		}); err != nil {
+			msg.Respond(types.EmitError("Internal error", types.NoErrors))
+			return
+		}
+	} else {
+		if err := utils.Database.Model(&models.UserCredential{}).
+			Where("user_id = ? AND type = ?", userID, credType).
+			Update("verified", true).Error; err != nil {
+			msg.Respond(types.EmitError("Internal error", types.NoErrors))
+			return
+		}
 	}
 
 	_ = sessions.DeleteVerificationCode(ctx, req.SessionID)
@@ -107,7 +137,7 @@ func CredentialVerifyResend(msg *nats.Msg) {
 
 	ctx := context.Background()
 
-	userID, credType, credValue, err := sessions.GetVerificationSession(ctx, req.SessionID)
+	userID, credType, credValue, _, err := sessions.GetVerificationSession(ctx, req.SessionID)
 	if err != nil {
 		msg.Respond(types.EmitError("Invalid session", types.NoErrors))
 		return

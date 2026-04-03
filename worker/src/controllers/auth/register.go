@@ -8,15 +8,14 @@ import (
 	"math/rand"
 	"time"
 
-	"openauth/worker/models"
 	"openauth/worker/utils"
-	casbinutil "openauth/worker/utils/casbin"
 	"openauth/worker/utils/credentials"
 	"openauth/worker/utils/sender"
 	"openauth/worker/utils/sessions"
 	"openauth/worker/utils/types"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"gorm.io/gorm"
 )
@@ -47,9 +46,11 @@ func Register(msg *nats.Msg) {
 			for i, fe := range ve {
 				fieldErrors[i] = types.Error{Reason: fe.Field(), Message: fe.Tag()}
 			}
+
 			msg.Respond(types.EmitError("Validation error", fieldErrors))
 			return
 		}
+
 		msg.Respond(types.EmitError("Validation error", types.NoErrors))
 		return
 	}
@@ -83,6 +84,7 @@ func registerEmail(msg *nats.Msg, req *RegisterRequest) {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
+
 	if existing != nil {
 		msg.Respond(types.EmitError("Email already taken", types.NoErrors))
 		return
@@ -94,27 +96,14 @@ func registerEmail(msg *nats.Msg, req *RegisterRequest) {
 		return
 	}
 
-	var user models.User
-	if err := utils.Database.Transaction(func(tx *gorm.DB) error {
-		user = models.User{Password: hash}
-		if err := tx.Create(&user).Error; err != nil {
-			return err
-		}
-		_, err := credentials.UpsertCredential(tx, user.ID, credentials.CredentialTypeEmail, req.Email)
-		return err
-	}); err != nil {
-		msg.Respond(types.EmitError("Internal error", types.NoErrors))
-		return
-	}
-
-	if role := utils.Config.Auth.DefaultRole; role != "" {
-		_, _ = casbinutil.Enforcer.AddRoleForUser(user.ID.String(), role)
-	}
-
 	ctx := context.Background()
 	codeTTL := time.Duration(utils.Config.Verification.CodeTTL) * time.Second
 
-	verificationSessionID, err := sessions.CreateVerificationSession(ctx, user.ID, credentials.CredentialTypeEmail, req.Email, codeTTL)
+	payload := map[string]string{
+		"password": hash,
+	}
+
+	verificationSessionID, err := sessions.CreateVerificationSession(ctx, uuid.Nil, credentials.CredentialTypeEmail, req.Email, codeTTL, payload)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
@@ -122,7 +111,7 @@ func registerEmail(msg *nats.Msg, req *RegisterRequest) {
 
 	code := fmt.Sprintf("%06d", rand.Intn(1000000))
 
-	if err := sessions.StoreVerificationCode(ctx, verificationSessionID, user.ID, code, credentials.CredentialTypeEmail, codeTTL); err != nil {
+	if err := sessions.StoreVerificationCode(ctx, verificationSessionID, uuid.Nil, code, credentials.CredentialTypeEmail, codeTTL); err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
@@ -151,6 +140,7 @@ func registerPhone(msg *nats.Msg, req *RegisterRequest) {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
+
 	if existing != nil {
 		msg.Respond(types.EmitError("Phone already taken", types.NoErrors))
 		return
@@ -162,27 +152,14 @@ func registerPhone(msg *nats.Msg, req *RegisterRequest) {
 		return
 	}
 
-	var user models.User
-	if err := utils.Database.Transaction(func(tx *gorm.DB) error {
-		user = models.User{Password: hash}
-		if err := tx.Create(&user).Error; err != nil {
-			return err
-		}
-		_, err := credentials.UpsertCredential(tx, user.ID, credentials.CredentialTypePhone, phone)
-		return err
-	}); err != nil {
-		msg.Respond(types.EmitError("Internal error", types.NoErrors))
-		return
-	}
-
-	if role := utils.Config.Auth.DefaultRole; role != "" {
-		_, _ = casbinutil.Enforcer.AddRoleForUser(user.ID.String(), role)
-	}
-
 	ctx := context.Background()
 	codeTTL := time.Duration(utils.Config.Verification.CodeTTL) * time.Second
 
-	verificationSessionID, err := sessions.CreateVerificationSession(ctx, user.ID, credentials.CredentialTypePhone, phone, codeTTL)
+	payload := map[string]string{
+		"password": hash,
+	}
+
+	verificationSessionID, err := sessions.CreateVerificationSession(ctx, uuid.Nil, credentials.CredentialTypePhone, phone, codeTTL, payload)
 	if err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
@@ -190,7 +167,7 @@ func registerPhone(msg *nats.Msg, req *RegisterRequest) {
 
 	code := fmt.Sprintf("%06d", rand.Intn(1000000))
 
-	if err := sessions.StoreVerificationCode(ctx, verificationSessionID, user.ID, code, credentials.CredentialTypePhone, codeTTL); err != nil {
+	if err := sessions.StoreVerificationCode(ctx, verificationSessionID, uuid.Nil, code, credentials.CredentialTypePhone, codeTTL); err != nil {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}

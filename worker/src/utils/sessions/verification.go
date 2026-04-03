@@ -42,7 +42,7 @@ end
 return 2
 `)
 
-func CreateVerificationSession(ctx context.Context, userID uuid.UUID, credType, credValue string, ttl time.Duration) (string, error) {
+func CreateVerificationSession(ctx context.Context, userID uuid.UUID, credType, credValue string, ttl time.Duration, payload map[string]string) (string, error) {
 	sessionID, err := GenerateSessionID()
 	if err != nil {
 		return "", err
@@ -50,11 +50,17 @@ func CreateVerificationSession(ctx context.Context, userID uuid.UUID, credType, 
 
 	key := fmt.Sprintf("%s:%s", prefixVerificationSession, sessionID)
 
-	if err := utils.Redis.HSet(ctx, key, map[string]any{
+	data := map[string]any{
 		"user_id":    userID.String(),
 		"cred_type":  credType,
 		"cred_value": credValue,
-	}).Err(); err != nil {
+	}
+
+	for k, v := range payload {
+		data["payload:"+k] = v
+	}
+
+	if err := utils.Redis.HSet(ctx, key, data).Err(); err != nil {
 		return "", err
 	}
 
@@ -65,28 +71,36 @@ func CreateVerificationSession(ctx context.Context, userID uuid.UUID, credType, 
 	return sessionID, nil
 }
 
-func GetVerificationSession(ctx context.Context, sessionID string) (uuid.UUID, string, string, error) {
+func GetVerificationSession(ctx context.Context, sessionID string) (uuid.UUID, string, string, map[string]string, error) {
 	key := fmt.Sprintf("%s:%s", prefixVerificationSession, sessionID)
 
 	data, err := utils.Redis.HGetAll(ctx, key).Result()
 	if err != nil {
-		return uuid.Nil, "", "", err
+		return uuid.Nil, "", "", nil, err
 	}
 
 	if len(data) == 0 {
-		return uuid.Nil, "", "", errors.New("session not found")
+		return uuid.Nil, "", "", nil, errors.New("session not found")
 	}
 
 	userID, err := uuid.Parse(data["user_id"])
 	if err != nil {
-		return uuid.Nil, "", "", err
+		return uuid.Nil, "", "", nil, err
 	}
 
-	return userID, data["cred_type"], data["cred_value"], nil
+	payload := make(map[string]string)
+	for k, v := range data {
+		if len(k) > 8 && k[:8] == "payload:" {
+			payload[k[8:]] = v
+		}
+	}
+
+	return userID, data["cred_type"], data["cred_value"], payload, nil
 }
 
 func DeleteVerificationSession(ctx context.Context, sessionID string) error {
 	key := fmt.Sprintf("%s:%s", prefixVerificationSession, sessionID)
+
 	return utils.Redis.Del(ctx, key).Err()
 }
 
@@ -125,6 +139,7 @@ func VerifyVerificationCode(ctx context.Context, sessionID, input string) (bool,
 
 func DeleteVerificationCode(ctx context.Context, sessionID string) error {
 	key := fmt.Sprintf("%s:%s", prefixVerificationCode, sessionID)
+
 	return utils.Redis.Del(ctx, key).Err()
 }
 
