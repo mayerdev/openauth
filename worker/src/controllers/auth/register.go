@@ -56,8 +56,18 @@ func Register(msg *nats.Msg) {
 
 	switch req.Method {
 	case "phone":
+		if !utils.Config.Auth.EnablePhone {
+			msg.Respond(types.EmitError("Phone auth is disabled", types.NoErrors))
+			return
+		}
+
 		registerPhone(msg, &req)
 	default:
+		if !utils.Config.Auth.EnableEmail {
+			msg.Respond(types.EmitError("Email auth is disabled", types.NoErrors))
+			return
+		}
+
 		registerEmail(msg, &req)
 	}
 }

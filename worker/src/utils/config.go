@@ -42,6 +42,8 @@ type ConfigFile struct {
 
 	Auth struct {
 		DefaultRole string `mapstructure:"default_role"`
+		EnableEmail bool   `mapstructure:"enable_email"`
+		EnablePhone bool   `mapstructure:"enable_phone"`
 	} `mapstructure:"auth"`
 }
 
@@ -76,6 +78,8 @@ func LoadConfig() {
 	viper.SetDefault("verification.max_attempts", 5)
 
 	viper.SetDefault("auth.default_role", "user")
+	viper.SetDefault("auth.enable_email", true)
+	viper.SetDefault("auth.enable_phone", true)
 
 	viper.SetEnvPrefix("APP")
 	viper.AutomaticEnv()

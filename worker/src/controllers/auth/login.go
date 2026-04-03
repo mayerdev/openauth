@@ -60,6 +60,11 @@ func Login(msg *nats.Msg) {
 
 	switch req.Method {
 	case "phone":
+		if !utils.Config.Auth.EnablePhone {
+			msg.Respond(types.EmitError("Phone auth is disabled", types.NoErrors))
+			return
+		}
+
 		phone, err := credentials.NormalizePhone(req.Phone)
 		if err != nil {
 			msg.Respond(types.EmitError("Invalid phone number", types.NoErrors))
@@ -68,6 +73,11 @@ func Login(msg *nats.Msg) {
 		credType = credentials.CredentialTypePhone
 		credValue = phone
 	default:
+		if !utils.Config.Auth.EnableEmail {
+			msg.Respond(types.EmitError("Email auth is disabled", types.NoErrors))
+			return
+		}
+
 		if req.Email == "" {
 			msg.Respond(types.EmitError("Email is required", types.NoErrors))
 			return
