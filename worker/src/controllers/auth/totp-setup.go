@@ -3,12 +3,15 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"openauth/worker/models"
 	"openauth/worker/utils"
 	"openauth/worker/utils/credentials"
+	"openauth/worker/utils/sender"
 	"openauth/worker/utils/sessions"
 	tfautil "openauth/worker/utils/tfa"
 	"openauth/worker/utils/types"
@@ -23,7 +26,9 @@ const (
 )
 
 type TotpStartRequest struct {
-	AccessToken string `json:"access_token"`
+	AccessToken  string `json:"access_token"`
+	TfaSessionID string `json:"tfa_session_id"`
+	Code         string `json:"code"`
 }
 
 type TotpConfirmRequest struct {
@@ -32,7 +37,9 @@ type TotpConfirmRequest struct {
 }
 
 type TotpUnlinkRequest struct {
-	AccessToken string `json:"access_token"`
+	AccessToken  string `json:"access_token"`
+	TfaSessionID string `json:"tfa_session_id"`
+	Code         string `json:"code"`
 }
 
 func TotpStart(msg *nats.Msg) {
@@ -46,6 +53,31 @@ func TotpStart(msg *nats.Msg) {
 	if err != nil {
 		msg.Respond(types.EmitError("Unauthorized", types.NoErrors))
 		return
+	}
+
+	var user models.User
+	if err := utils.Database.First(&user, "id = ?", claims.UserID).Error; err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
+	if user.TfaMethod != "none" {
+		if req.TfaSessionID == "" {
+			result, err := startTfaFlow(&user)
+			if err != nil {
+				msg.Respond(types.EmitError("Internal error", types.NoErrors))
+				return
+			}
+
+			data, _ := json.Marshal(result)
+			msg.Respond(data)
+			return
+		}
+
+		if err := verifyTfaFlow(req.TfaSessionID, req.Code, &user); err != nil {
+			msg.Respond(types.EmitError(err.Error(), types.NoErrors))
+			return
+		}
 	}
 
 	secret, err := tfautil.GenerateSecret()
@@ -135,6 +167,31 @@ func TotpUnlink(msg *nats.Msg) {
 		return
 	}
 
+	var user models.User
+	if err := utils.Database.First(&user, "id = ?", claims.UserID).Error; err != nil {
+		msg.Respond(types.EmitError("Internal error", types.NoErrors))
+		return
+	}
+
+	if user.TfaMethod != "none" {
+		if req.TfaSessionID == "" {
+			result, err := startTfaFlow(&user)
+			if err != nil {
+				msg.Respond(types.EmitError("Internal error", types.NoErrors))
+				return
+			}
+
+			data, _ := json.Marshal(result)
+			msg.Respond(data)
+			return
+		}
+
+		if err := verifyTfaFlow(req.TfaSessionID, req.Code, &user); err != nil {
+			msg.Respond(types.EmitError(err.Error(), types.NoErrors))
+			return
+		}
+	}
+
 	if err := utils.Database.Exec(
 		"UPDATE users SET tfa_secret = NULL, tfa_backup_codes = NULL, tfa_method = CASE WHEN tfa_method = 'totp' THEN 'none' ELSE tfa_method END WHERE id = ?",
 		claims.UserID,
@@ -145,4 +202,102 @@ func TotpUnlink(msg *nats.Msg) {
 
 	data, _ := json.Marshal(map[string]bool{"ok": true})
 	msg.Respond(data)
+}
+
+func startTfaFlow(user *models.User) (*TfaRequiredResult, error) {
+	ctx := context.Background()
+	tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if user.TfaMethod == "email" || user.TfaMethod == "phone" {
+		var allCreds []models.UserCredential
+		utils.Database.Where("user_id = ?", user.ID).Find(&allCreds)
+
+		code := fmt.Sprintf("%06d", rand.Intn(1000000))
+		_ = sessions.StoreTfaCode(ctx, tfaSessionID, user.ID, code, user.TfaMethod, 5*time.Minute)
+
+		sendType := "sms"
+		credType := credentials.CredentialTypePhone
+		if user.TfaMethod == "email" {
+			sendType = "email"
+			credType = credentials.CredentialTypeEmail
+		}
+
+		for _, c := range allCreds {
+			if c.Type == credType {
+				sender.SendCode(utils.Nats, sendType, c.Value, code)
+				break
+			}
+		}
+	}
+
+	return &TfaRequiredResult{
+		TfaRequired:  true,
+		TfaSessionID: tfaSessionID,
+		TfaMethod:    user.TfaMethod,
+		ExpiresIn:    300,
+	}, nil
+}
+
+func verifyTfaFlow(sessionID, code string, user *models.User) error {
+	if code == "" {
+		return fmt.Errorf("code is required")
+	}
+
+	ctx := context.Background()
+	userID, method, err := sessions.GetTfaSession(ctx, sessionID)
+	if err != nil || userID != user.ID {
+		return fmt.Errorf("Invalid session")
+	}
+
+	var verified bool
+	switch method {
+	case "totp":
+		if user.TfaSecret == nil {
+			return fmt.Errorf("2FA not configured")
+		}
+
+		if tfautil.VerifyCode(*user.TfaSecret, code) {
+			verified = true
+		} else {
+			var backupCodes []string
+			if user.TfaBackupCodes != nil {
+				_ = json.Unmarshal(user.TfaBackupCodes, &backupCodes)
+			}
+
+			for i, c := range backupCodes {
+				if c != "" && c == code {
+					verified = true
+					backupCodes[i] = ""
+					updated, _ := json.Marshal(backupCodes)
+					utils.Database.Model(user).Update("tfa_backup_codes", updated)
+					break
+				}
+			}
+		}
+
+	case "email", "phone":
+		ok, err := sessions.VerifyTfaCode(ctx, sessionID, userID.String(), code)
+		if err != nil {
+			if errors.Is(err, sessions.ErrMaxAttempts) {
+				return fmt.Errorf("Max attempts exceeded")
+			}
+
+			return fmt.Errorf("Internal error")
+		}
+
+		if ok {
+			verified = true
+			_ = sessions.DeleteTfaCode(ctx, sessionID)
+		}
+	}
+
+	if !verified {
+		return fmt.Errorf("Invalid code")
+	}
+
+	_ = sessions.DeleteTfaSession(ctx, sessionID)
+	return nil
 }

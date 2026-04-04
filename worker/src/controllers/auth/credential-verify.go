@@ -44,7 +44,7 @@ func CredentialVerify(msg *nats.Msg) {
 		return
 	}
 
-	ok, err := sessions.VerifyVerificationCode(ctx, req.SessionID, req.Code)
+	ok, err := sessions.VerifyVerificationCode(ctx, req.SessionID, userID.String(), req.Code)
 	if err != nil {
 		if errors.Is(err, sessions.ErrMaxAttempts) {
 			msg.Respond(types.EmitError("Max attempts exceeded", types.NoErrors))

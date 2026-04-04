@@ -26,6 +26,11 @@ paths:
       summary: Begin TOTP setup — generates a new secret and provisioning URI
       security:
         - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpStartRequest"
       responses:
         "200":
           description: TOTP secret and otpauth:// URI for QR code
@@ -66,13 +71,20 @@ paths:
       summary: Remove TOTP from the account
       security:
         - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpUnlinkRequest"
       responses:
         "200":
-          description: TOTP removed
+          description: TOTP removed or TFA challenge
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OkResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -675,6 +687,16 @@ components:
 
     # ─── TOTP ─────────────────────────────────────────────────────────────────
 
+    TotpStartRequest:
+      type: object
+      properties:
+        tfa_session_id:
+          type: string
+          description: Optional. Required if 2FA is already enabled.
+        code:
+          type: string
+          description: Optional. Required if 2FA is already enabled (code from email/sms/totp/backup).
+
     TotpStartResponse:
       type: object
       properties:
@@ -684,7 +706,16 @@ components:
         secret:
           type: string
           description: Base32-encoded TOTP secret (for manual entry)
-      required: [provisioning_uri, secret]
+        tfa_required:
+          type: boolean
+          description: Indicates if TFA verification is needed before starting setup.
+        tfa_session_id:
+          type: string
+        tfa_method:
+          type: string
+        expires_in:
+          type: integer
+      required: []
 
     TotpConfirmRequest:
       type: object
@@ -704,7 +735,13 @@ components:
           description: One-time backup codes (store securely)
       required: [backup_codes]
 
-    # ─── TFA method ───────────────────────────────────────────────────────────
+    TotpUnlinkRequest:
+      type: object
+      properties:
+        tfa_session_id:
+          type: string
+        code:
+          type: string
 
     TfaMethodResponse:
       type: object

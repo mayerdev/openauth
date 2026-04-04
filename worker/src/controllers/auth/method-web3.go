@@ -32,6 +32,7 @@ func Web3Method(msg *nats.Msg) {
 		strings.ToLower(req.Address),
 		true,
 		req.Scope,
+		"",
 	)
 
 	if err != nil {

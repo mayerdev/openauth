@@ -10,21 +10,21 @@ import (
 
 type Worker interface {
 	Register(method, identifier, password string) (*RegisterResult, error)
-	Login(method, identifier, password, scope string) (*LoginResult, error)
+	Login(method, identifier, password, scope, authSessionID string) (*LoginResult, error)
 	TFAVerify(sessionID, code, scope string) (*TokenResult, error)
 	RefreshToken(refreshToken string) (*TokenResult, error)
 	Verify(accessToken string) (*UserResult, error)
-	Logout(accessToken string) error
-	OAuthMethod(provider, providerID, email, name, scope string) (*LoginResult, error)
+	OAuthMethod(provider, providerID, email, name, scope, authSessionID string) (*LoginResult, error)
 	Web3Method(address, scope string) (*TokenResult, error)
-	TotpStart(accessToken string) (*TotpStartResult, error)
+	TotpStart(accessToken string, tfaSessionID, code string) (*TotpStartResult, error)
 	TotpConfirm(accessToken, code string) (*TotpConfirmResult, error)
-	TotpUnlink(accessToken string) error
+	TotpUnlink(accessToken string, tfaSessionID, code string) (*TotpUnlinkResult, error)
 	TfaMethodGet(accessToken string) (string, error)
 	TfaMethodSet(accessToken, method string) error
 	CredentialVerify(sessionID, code, scope string) (*TokenResult, error)
 	CredentialVerifyResend(sessionID string) error
 	ListRoles(userID string) ([]string, error)
+	Logout(accessToken string) error
 }
 
 type RegisterResult struct {
@@ -38,6 +38,10 @@ type RegisterResult struct {
 type TotpStartResult struct {
 	ProvisioningURI string `json:"provisioning_uri"`
 	Secret          string `json:"secret"`
+	TFARequired     bool   `json:"tfa_required"`
+	TFASessionID    string `json:"tfa_session_id"`
+	TFAMethod       string `json:"tfa_method"`
+	ExpiresIn       int    `json:"expires_in"`
 }
 
 type TotpConfirmResult struct {
@@ -72,6 +76,14 @@ type UserResult struct {
 	CreatedAt   string             `json:"created_at"`
 	UpdatedAt   string             `json:"updated_at"`
 	Credentials []CredentialResult `json:"credentials"`
+}
+
+type TotpUnlinkResult struct {
+	Ok           bool   `json:"ok"`
+	TfaRequired  bool   `json:"tfa_required"`
+	TfaSessionID string `json:"tfa_session_id"`
+	TfaMethod    string `json:"tfa_method"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 type workerError struct {
@@ -130,8 +142,8 @@ func (w *WorkerClient) Register(method, identifier, password string) (*RegisterR
 	return &result, nil
 }
 
-func (w *WorkerClient) Login(method, identifier, password, scope string) (*LoginResult, error) {
-	m := map[string]string{"method": method, "password": password, "scope": scope}
+func (w *WorkerClient) Login(method, identifier, password, scope, authSessionID string) (*LoginResult, error) {
+	m := map[string]string{"method": method, "password": password, "scope": scope, "auth_session_id": authSessionID}
 	if method == "phone" {
 		m["phone"] = identifier
 	} else {
@@ -220,13 +232,14 @@ func (w *WorkerClient) Verify(accessToken string) (*UserResult, error) {
 	return &result, nil
 }
 
-func (w *WorkerClient) OAuthMethod(provider, providerID, email, name, scope string) (*LoginResult, error) {
+func (w *WorkerClient) OAuthMethod(provider, providerID, email, name, scope, authSessionID string) (*LoginResult, error) {
 	payload, _ := json.Marshal(map[string]string{
-		"provider":    provider,
-		"provider_id": providerID,
-		"email":       email,
-		"name":        name,
-		"scope":       scope,
+		"provider":        provider,
+		"provider_id":     providerID,
+		"email":           email,
+		"name":            name,
+		"scope":           scope,
+		"auth_session_id": authSessionID,
 	})
 
 	msg, err := w.nc.Request("auth.method.oauth", payload, w.timeout)
@@ -269,8 +282,12 @@ func (w *WorkerClient) Web3Method(address, scope string) (*TokenResult, error) {
 	return &result, nil
 }
 
-func (w *WorkerClient) TotpStart(accessToken string) (*TotpStartResult, error) {
-	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+func (w *WorkerClient) TotpStart(accessToken, tfaSessionID, code string) (*TotpStartResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":   accessToken,
+		"tfa_session_id": tfaSessionID,
+		"code":           code,
+	})
 	msg, err := w.nc.Request("auth.totp.start", payload, w.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("worker totp.start: %w", err)
@@ -281,7 +298,7 @@ func (w *WorkerClient) TotpStart(accessToken string) (*TotpStartResult, error) {
 		return nil, fmt.Errorf("worker totp.start decode: %w", err)
 	}
 
-	if result.ProvisioningURI == "" {
+	if result.ProvisioningURI == "" && !result.TFARequired {
 		var e workerError
 		json.Unmarshal(msg.Data, &e)
 		return nil, fmt.Errorf("%s", e.Message)
@@ -311,20 +328,29 @@ func (w *WorkerClient) TotpConfirm(accessToken, code string) (*TotpConfirmResult
 	return &result, nil
 }
 
-func (w *WorkerClient) TotpUnlink(accessToken string) error {
-	payload, _ := json.Marshal(map[string]string{"access_token": accessToken})
+func (w *WorkerClient) TotpUnlink(accessToken, tfaSessionID, code string) (*TotpUnlinkResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":   accessToken,
+		"tfa_session_id": tfaSessionID,
+		"code":           code,
+	})
 	msg, err := w.nc.Request("auth.totp.unlink", payload, w.timeout)
 	if err != nil {
-		return fmt.Errorf("worker totp.unlink: %w", err)
+		return nil, fmt.Errorf("worker totp.unlink: %w", err)
 	}
 
-	var e workerError
-	json.Unmarshal(msg.Data, &e)
-	if e.Message != "" {
-		return fmt.Errorf("%s", e.Message)
+	var res TotpUnlinkResult
+	if err := json.Unmarshal(msg.Data, &res); err != nil {
+		return nil, fmt.Errorf("worker totp.unlink decode: %w", err)
 	}
 
-	return nil
+	if !res.Ok && !res.TfaRequired {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &res, nil
 }
 
 func (w *WorkerClient) TfaMethodGet(accessToken string) (string, error) {
@@ -412,6 +438,7 @@ func (w *WorkerClient) ListRoles(userID string) ([]string, error) {
 	var result struct {
 		Roles []string `json:"roles"`
 	}
+
 	if err := json.Unmarshal(msg.Data, &result); err != nil {
 		return nil, fmt.Errorf("worker roles.list decode: %w", err)
 	}

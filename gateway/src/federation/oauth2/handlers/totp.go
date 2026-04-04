@@ -19,7 +19,14 @@ func (h *TotpHandler) PostTotpStart(c fiber.Ctx) error {
 		return c.Status(401).JSON(ErrorResponse{Error: "unauthorized"})
 	}
 
-	result, err := h.worker.TotpStart(token)
+	var body struct {
+		TfaSessionID string `json:"tfa_session_id"`
+		Code         string `json:"code"`
+	}
+
+	_ = c.Bind().Body(&body)
+
+	result, err := h.worker.TotpStart(token, body.TfaSessionID, body.Code)
 	if err != nil {
 		return c.Status(400).JSON(ErrorResponse{Error: "request_failed", ErrorDescription: err.Error()})
 	}
@@ -54,11 +61,19 @@ func (h *TotpHandler) PostTotpUnlink(c fiber.Ctx) error {
 		return c.Status(401).JSON(ErrorResponse{Error: "unauthorized"})
 	}
 
-	if err := h.worker.TotpUnlink(token); err != nil {
+	var body struct {
+		TfaSessionID string `json:"tfa_session_id"`
+		Code         string `json:"code"`
+	}
+
+	_ = c.Bind().Body(&body)
+
+	result, err := h.worker.TotpUnlink(token, body.TfaSessionID, body.Code)
+	if err != nil {
 		return c.Status(400).JSON(ErrorResponse{Error: "request_failed", ErrorDescription: err.Error()})
 	}
 
-	return c.JSON(map[string]bool{"ok": true})
+	return c.JSON(result)
 }
 
 func (h *TotpHandler) GetTfaMethod(c fiber.Ctx) error {

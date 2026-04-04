@@ -111,7 +111,7 @@ func (h *LoginHandler) PostAuthorize(c fiber.Ctx) error {
 		identifier = req.Phone
 	}
 
-	result, err := h.worker.Login(method, identifier, req.Password, sess.Scope)
+	result, err := h.worker.Login(method, identifier, req.Password, sess.Scope, req.AuthSessionID)
 	if err != nil {
 		return c.Status(401).JSON(ErrorResponse{Error: "invalid_credentials", ErrorDescription: err.Error()})
 	}

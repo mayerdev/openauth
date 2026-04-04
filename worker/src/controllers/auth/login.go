@@ -20,11 +20,12 @@ import (
 )
 
 type LoginRequest struct {
-	Method   string `json:"method"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Password string `json:"password" validate:"required,password"`
-	Scope    string `json:"scope"`
+	Method        string `json:"method"`
+	Email         string `json:"email"`
+	Phone         string `json:"phone"`
+	Password      string `json:"password" validate:"required,password"`
+	Scope         string `json:"scope"`
+	AuthSessionID string `json:"auth_session_id"`
 }
 
 func Login(msg *nats.Msg) {
@@ -109,7 +110,7 @@ func Login(msg *nats.Msg) {
 	ctx := context.Background()
 
 	if user.TfaMethod != "none" {
-		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute)
+		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute, req.AuthSessionID)
 		if err != nil {
 			msg.Respond(types.EmitError("Internal error", types.NoErrors))
 			return

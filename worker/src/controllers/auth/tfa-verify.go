@@ -89,7 +89,7 @@ func TfaVerify(msg *nats.Msg) {
 		}
 
 	case "email", "phone":
-		ok, err := sessions.VerifyTfaCode(ctx, req.SessionID, req.Code)
+		ok, err := sessions.VerifyTfaCode(ctx, req.SessionID, userID.String(), req.Code)
 		if err != nil {
 			if errors.Is(err, sessions.ErrMaxAttempts) {
 				msg.Respond(types.EmitError("Max attempts exceeded", types.NoErrors))

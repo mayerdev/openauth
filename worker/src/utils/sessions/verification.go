@@ -24,9 +24,15 @@ var verifyVerificationScript = redis.NewScript(`
 local key = KEYS[1]
 local input = ARGV[1]
 local limit = tonumber(ARGV[2])
+local expected_user_id = ARGV[3]
 
 if redis.call('EXISTS', key) == 0 then
   return -1
+end
+
+local stored_user_id = redis.call('HGET', key, 'user_id')
+if stored_user_id ~= expected_user_id then
+  return -2
 end
 
 local attempts = redis.call('HINCRBY', key, 'attempts', 1)
@@ -119,10 +125,10 @@ func StoreVerificationCode(ctx context.Context, sessionID string, userID uuid.UU
 	return utils.Redis.Expire(ctx, key, ttl).Err()
 }
 
-func VerifyVerificationCode(ctx context.Context, sessionID, input string) (bool, error) {
+func VerifyVerificationCode(ctx context.Context, sessionID, userID, input string) (bool, error) {
 	key := fmt.Sprintf("%s:%s", prefixVerificationCode, sessionID)
 
-	result, err := verifyVerificationScript.Run(ctx, utils.Redis, []string{key}, input, utils.Config.Verification.MaxAttempts).Int()
+	result, err := verifyVerificationScript.Run(ctx, utils.Redis, []string{key}, input, utils.Config.Verification.MaxAttempts, userID).Int()
 	if err != nil {
 		return false, err
 	}
@@ -132,6 +138,8 @@ func VerifyVerificationCode(ctx context.Context, sessionID, input string) (bool,
 		return true, nil
 	case 0:
 		return false, ErrMaxAttempts
+	case -2:
+		return false, errors.New("user mismatch")
 	default:
 		return false, nil
 	}
@@ -147,13 +155,13 @@ func CheckAndSetResendInterval(ctx context.Context, sessionID string) error {
 	key := fmt.Sprintf("%s:%s", prefixVerificationResend, sessionID)
 	ttl := time.Duration(utils.Config.Verification.ResendInterval) * time.Second
 
-	set, err := utils.Redis.SetNX(ctx, key, 1, ttl).Result()
+	err := utils.Redis.SetArgs(ctx, key, 1, redis.SetArgs{Mode: "NX", TTL: ttl}).Err()
 	if err != nil {
-		return err
-	}
+		if errors.Is(err, redis.Nil) {
+			return ErrResendTooSoon
+		}
 
-	if !set {
-		return ErrResendTooSoon
+		return err
 	}
 
 	return nil

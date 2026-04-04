@@ -10,11 +10,12 @@ import (
 )
 
 type OAuthMethodRequest struct {
-	Provider   string `json:"provider"    validate:"required"`
-	ProviderID string `json:"provider_id" validate:"required"`
-	Email      string `json:"email"`
-	Name       string `json:"name"`
-	Scope      string `json:"scope"`
+	Provider      string `json:"provider"    validate:"required"`
+	ProviderID    string `json:"provider_id" validate:"required"`
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	Scope         string `json:"scope"`
+	AuthSessionID string `json:"auth_session_id"`
 }
 
 func OAuthMethod(msg *nats.Msg) {
@@ -34,6 +35,7 @@ func OAuthMethod(msg *nats.Msg) {
 		req.ProviderID,
 		false,
 		req.Scope,
+		req.AuthSessionID,
 	)
 
 	if err != nil {

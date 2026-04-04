@@ -149,6 +149,10 @@ func (h *OAuthMethodHandler) GetCallback(c fiber.Ctx) error {
 	}
 
 	providerCfg := utils.FindOAuthProvider(provider)
+	if providerCfg == nil {
+		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "unknown provider"})
+	}
+
 	endpoint := providerEndpoints[provider]
 
 	oauthConfig := &oauth2.Config{
@@ -169,7 +173,7 @@ func (h *OAuthMethodHandler) GetCallback(c fiber.Ctx) error {
 		return c.Status(500).JSON(ErrorResponse{Error: "server_error", ErrorDescription: "failed to fetch user info"})
 	}
 
-	result, err := h.worker.OAuthMethod(provider, userInfo.id(), userInfo.Email, userInfo.name(), sess.Scope)
+	result, err := h.worker.OAuthMethod(provider, userInfo.id(), userInfo.Email, userInfo.name(), sess.Scope, oauthState.AuthSessionID)
 	if err != nil {
 		return c.Status(401).JSON(ErrorResponse{Error: "invalid_credentials", ErrorDescription: err.Error()})
 	}
