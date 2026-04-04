@@ -15,9 +15,10 @@ type Client struct {
 }
 
 type OAuthProviderConfig struct {
-	ClientID     string `mapstructure:"client_id"`
-	ClientSecret string `mapstructure:"client_secret"`
-	RedirectURI  string `mapstructure:"redirect_uri"`
+	ClientID        string `mapstructure:"client_id"`
+	ClientSecret    string `mapstructure:"client_secret"`
+	RedirectURI     string `mapstructure:"redirect_uri"`
+	LinkRedirectURI string `mapstructure:"link_redirect_uri"`
 }
 
 type ConfigFile struct {

@@ -16,6 +16,7 @@ const oauthStatePrefix = "gw:oauth_state:"
 type OAuthState struct {
 	AuthSessionID string `json:"auth_session_id"`
 	CodeVerifier  string `json:"code_verifier"`
+	AccessToken   string `json:"access_token,omitempty"`
 }
 
 type OAuthStateService struct {

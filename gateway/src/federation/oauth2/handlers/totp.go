@@ -90,6 +90,27 @@ func (h *TotpHandler) GetTfaMethod(c fiber.Ctx) error {
 	return c.JSON(map[string]string{"method": method})
 }
 
+func (h *TotpHandler) PostTfaResend(c fiber.Ctx) error {
+	token, ok := bearerToken(c)
+	if !ok {
+		return c.Status(401).JSON(ErrorResponse{Error: "unauthorized"})
+	}
+
+	var body struct {
+		TfaSessionID string `json:"tfa_session_id"`
+	}
+
+	if err := c.Bind().Body(&body); err != nil || body.TfaSessionID == "" {
+		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "tfa_session_id is required"})
+	}
+
+	if err := h.worker.TfaResend(token, body.TfaSessionID); err != nil {
+		return c.Status(400).JSON(ErrorResponse{Error: "request_failed", ErrorDescription: err.Error()})
+	}
+
+	return c.JSON(map[string]bool{"ok": true})
+}
+
 func (h *TotpHandler) PutTfaMethod(c fiber.Ctx) error {
 	token, ok := bearerToken(c)
 	if !ok {

@@ -3,11 +3,24 @@ info:
   title: OpenAuth Gateway
   version: 1.0.0
 
+tags:
+  - name: Account
+    description: Endpoints for authenticated users — session management, history, TFA settings
+  - name: OAuth2
+    description: OAuth2 authorization server core — authorize, token exchange, introspection
+  - name: Auth Methods
+    description: Email and phone registration and credential verification
+  - name: OAuth2 Methods
+    description: Third-party OAuth providers (Google, GitHub) and Web3/SIWE wallet login
+  - name: Credentials
+    description: Link and unlink additional credentials (email, phone, OAuth, Web3) to an existing account
+
 paths:
-  # ─── User API (authenticated) ────────────────────────────────────────────────
+  # ─── Account ─────────────────────────────────────────────────────────────────
 
   /api/logout:
     post:
+      tags: [Account]
       summary: Invalidate current session
       security:
         - bearerAuth: []
@@ -23,6 +36,7 @@ paths:
 
   /api/history:
     get:
+      tags: [Account]
       summary: Get authorization history for the current user
       description: |
         Returns a paginated list of login events for the authenticated user,
@@ -59,6 +73,7 @@ paths:
 
   /api/totp/start:
     post:
+      tags: [Account]
       summary: Begin TOTP setup — generates a new secret and provisioning URI
       security:
         - bearerAuth: []
@@ -81,6 +96,7 @@ paths:
 
   /api/totp/confirm:
     post:
+      tags: [Account]
       summary: Confirm TOTP setup with a code from the authenticator app
       security:
         - bearerAuth: []
@@ -104,6 +120,7 @@ paths:
 
   /api/totp/unlink:
     post:
+      tags: [Account]
       summary: Remove TOTP from the account
       security:
         - bearerAuth: []
@@ -126,8 +143,34 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/tfa/resend:
+    post:
+      tags: [Account]
+      summary: Resend TFA verification code
+      description: Resends the TFA code for an active TFA session. Rate limited by resend interval.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TfaResendRequest"
+      responses:
+        "200":
+          description: Code resent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/tfa/method:
     get:
+      tags: [Account]
       summary: Get current TFA method
       security:
         - bearerAuth: []
@@ -142,6 +185,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
     put:
+      tags: [Account]
       summary: Set TFA method
       description: |
         To set `totp`, TOTP must already be configured via `/api/totp/confirm`.
@@ -169,6 +213,7 @@ paths:
 
   /oauth2/authorize:
     get:
+      tags: [OAuth2]
       summary: Initialize authorization session
       parameters:
         - name: client_id
@@ -207,6 +252,7 @@ paths:
           $ref: "#/components/responses/BadRequest"
 
     post:
+      tags: [OAuth2]
       summary: Submit credentials (login step) or TFA code (TFA step)
       description: |
         **Login step:** provide `method` + credentials + `password`.
@@ -236,6 +282,7 @@ paths:
 
   /oauth2/introspect:
     post:
+      tags: [OAuth2]
       summary: Introspect a token (RFC 7662)
       description: |
         Validates an access token and returns its metadata.
@@ -265,6 +312,7 @@ paths:
 
   /oauth2/token:
     post:
+      tags: [OAuth2]
       summary: Exchange authorization code or refresh token for tokens
       requestBody:
         required: true
@@ -291,6 +339,7 @@ paths:
 
   /oauth2/methods/email/register:
     post:
+      tags: [Auth Methods]
       summary: Register with email and password
       description: |
         Creates a new account and sends a verification code to the provided email.
@@ -314,6 +363,7 @@ paths:
 
   /oauth2/methods/email/verify:
     post:
+      tags: [Auth Methods]
       summary: Verify email with the code received after registration
       requestBody:
         required: true
@@ -333,6 +383,7 @@ paths:
 
   /oauth2/methods/email/verify/resend:
     post:
+      tags: [Auth Methods]
       summary: Resend verification code
       description: |
         Rate-limited — subject to `verification.resend_interval` (default 60 s).
@@ -355,6 +406,7 @@ paths:
 
   /oauth2/methods/phone/register:
     post:
+      tags: [Auth Methods]
       summary: Register with phone number and password
       description: |
         Creates a new account and sends a verification code via SMS.
@@ -378,6 +430,7 @@ paths:
 
   /oauth2/methods/phone/verify:
     post:
+      tags: [Auth Methods]
       summary: Verify phone number with the SMS code received after registration
       requestBody:
         required: true
@@ -397,6 +450,7 @@ paths:
 
   /oauth2/methods/phone/verify/resend:
     post:
+      tags: [Auth Methods]
       summary: Resend SMS verification code
       description: |
         Rate-limited — subject to `verification.resend_interval` (default 60 s).
@@ -419,6 +473,7 @@ paths:
 
   /oauth2/methods/oauth/{provider}/start:
     post:
+      tags: [OAuth2 Methods]
       summary: Initiate OAuth provider login (Google, GitHub, …)
       parameters:
         - name: provider
@@ -445,6 +500,7 @@ paths:
 
   /oauth2/methods/oauth/{provider}/callback:
     get:
+      tags: [OAuth2 Methods]
       summary: OAuth provider callback (browser redirect)
       parameters:
         - name: provider
@@ -472,6 +528,7 @@ paths:
 
   /oauth2/methods/web3/start:
     post:
+      tags: [OAuth2 Methods]
       summary: Initiate Web3/SIWE login — returns message to sign
       requestBody:
         required: true
@@ -491,6 +548,7 @@ paths:
 
   /oauth2/methods/web3/consume:
     post:
+      tags: [OAuth2 Methods]
       summary: Complete Web3 login by submitting the signed message
       requestBody:
         required: true
@@ -505,6 +563,263 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LoginSuccessResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── Credentials ──────────────────────────────────────────────────────────
+
+  /api/credentials/email/start:
+    post:
+      tags: [Credentials]
+      summary: Start email credential linking
+      description: Sends a verification code to the email address. Requires a valid access token.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialEmailLinkStartRequest"
+      responses:
+        "200":
+          description: Verification code sent or TFA challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CredentialLinkStartResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/email/confirm:
+    post:
+      summary: Confirm email credential linking
+      description: Verifies the code and links the email credential to the user's account.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialLinkConfirmRequest"
+      responses:
+        "200":
+          description: Email linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/phone/start:
+    post:
+      summary: Start phone credential linking
+      description: Sends an SMS verification code to the phone number.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialPhoneLinkStartRequest"
+      responses:
+        "200":
+          description: Verification code sent or TFA challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CredentialLinkStartResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/phone/confirm:
+    post:
+      summary: Confirm phone credential linking
+      description: Verifies the code and links the phone credential to the user's account.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialLinkConfirmRequest"
+      responses:
+        "200":
+          description: Phone linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/oauth/{provider}/start:
+    post:
+      summary: Start OAuth credential linking
+      description: Returns an OAuth authorization URL to link a provider account.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [google, github]
+      responses:
+        "200":
+          description: OAuth authorization URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthStartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/oauth/{provider}/callback:
+    get:
+      summary: OAuth credential link callback
+      description: Handles the OAuth provider redirect, exchanges the code, and links the credential.
+      tags: [Credentials]
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Credential linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/credentials/web3/start:
+    post:
+      summary: Start Web3 credential linking
+      description: Generates a SIWE message for the user to sign with their wallet.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address:
+                  type: string
+                  description: Ethereum address (0x...)
+              required: [address]
+      responses:
+        "200":
+          description: SIWE message to sign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Web3StartResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/web3/consume:
+    post:
+      summary: Confirm Web3 credential linking
+      description: Verifies the SIWE signature and links the wallet address.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                signature:
+                  type: string
+              required: [message, signature]
+      responses:
+        "200":
+          description: Wallet linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/credentials/{id}:
+    delete:
+      summary: Unlink a credential
+      description: Removes a credential from the account. Fails if it's the last verified credential. Requires TFA if enabled.
+      tags: [Credentials]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialUnlinkRequest"
+      responses:
+        "200":
+          description: Credential removed or TFA challenge
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/TFARequiredResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -931,6 +1246,73 @@ components:
         scope:
           type: string
       required: [access_token, token_type, expires_in, refresh_token]
+
+    # ─── Credentials ──────────────────────────────────────────────────────────
+
+    CredentialEmailLinkStartRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        tfa_session_id:
+          type: string
+        code:
+          type: string
+          example: "123456"
+      required: [email]
+
+    CredentialPhoneLinkStartRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+          example: "+1234567890"
+        tfa_session_id:
+          type: string
+        code:
+          type: string
+          example: "123456"
+      required: [phone]
+
+    CredentialLinkConfirmRequest:
+      type: object
+      properties:
+        verification_session_id:
+          type: string
+        code:
+          type: string
+          example: "123456"
+      required: [verification_session_id, code]
+
+    CredentialLinkStartResponse:
+      type: object
+      properties:
+        verification_session_id:
+          type: string
+        verification_method:
+          type: string
+          enum: [email, phone]
+        expires_in:
+          type: integer
+      required: [verification_session_id, verification_method, expires_in]
+
+    CredentialUnlinkRequest:
+      type: object
+      properties:
+        tfa_session_id:
+          type: string
+        code:
+          type: string
+          example: "123456"
+
+    TfaResendRequest:
+      type: object
+      properties:
+        tfa_session_id:
+          type: string
+      required: [tfa_session_id]
+
 
     # ─── Introspect (RFC 7662) ────────────────────────────────────────────────
 

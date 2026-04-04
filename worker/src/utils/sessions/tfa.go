@@ -16,6 +16,7 @@ const (
 	prefixTfaSession     = "tfa_session"
 	prefixTfaCode        = "tfa_code"
 	prefixAuthTfaMapping = "auth_tfa_mapping"
+	prefixTfaResend      = "tfa_resend"
 )
 
 var ErrMaxAttempts = errors.New("max attempts exceeded")
@@ -137,6 +138,22 @@ func StoreTfaCode(ctx context.Context, sessionID string, userID uuid.UUID, code,
 func DeleteTfaCode(ctx context.Context, sessionID string) error {
 	key := fmt.Sprintf("%s:%s", prefixTfaCode, sessionID)
 	return utils.Redis.Del(ctx, key).Err()
+}
+
+func CheckTfaResend(ctx context.Context, sessionID string) error {
+	key := fmt.Sprintf("%s:%s", prefixTfaResend, sessionID)
+	ttl := time.Duration(utils.Config.Verification.ResendInterval) * time.Second
+
+	err := utils.Redis.SetArgs(ctx, key, 1, redis.SetArgs{Mode: "NX", TTL: ttl}).Err()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return ErrResendTooSoon
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 func VerifyTfaCode(ctx context.Context, sessionID, userID, input string) (bool, error) {

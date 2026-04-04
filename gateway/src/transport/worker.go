@@ -26,6 +26,14 @@ type Worker interface {
 	ListRoles(userID string) ([]string, error)
 	Logout(accessToken string) error
 	GetAuthHistory(accessToken string, page, pageSize int) (*AuthHistoryResult, error)
+	LinkEmailStart(accessToken, email, tfaSessionID, code string) (*CredentialLinkStartResult, error)
+	LinkEmailConfirm(accessToken, verificationSessionID, code string) error
+	LinkPhoneStart(accessToken, phone, tfaSessionID, code string) (*CredentialLinkStartResult, error)
+	LinkPhoneConfirm(accessToken, verificationSessionID, code string) error
+	LinkOAuth(accessToken, provider, providerID, email, name, tfaSessionID, code string) (*CredentialDirectResult, error)
+	LinkWeb3(accessToken, address, tfaSessionID, code string) (*CredentialDirectResult, error)
+	UnlinkDirect(accessToken, credentialID, tfaSessionID, code string) (*CredentialDirectResult, error)
+	TfaResend(accessToken, tfaSessionID string) error
 }
 
 type RegisterResult struct {
@@ -101,6 +109,23 @@ type AuthHistoryResult struct {
 	Total    int64          `json:"total"`
 	Page     int            `json:"page"`
 	PageSize int            `json:"page_size"`
+}
+
+type CredentialLinkStartResult struct {
+	TFARequired           bool   `json:"tfa_required,omitempty"`
+	TFASessionID          string `json:"tfa_session_id,omitempty"`
+	TFAMethod             string `json:"tfa_method,omitempty"`
+	VerificationSessionID string `json:"verification_session_id,omitempty"`
+	VerificationMethod    string `json:"verification_method,omitempty"`
+	ExpiresIn             int    `json:"expires_in,omitempty"`
+}
+
+type CredentialDirectResult struct {
+	TFARequired  bool   `json:"tfa_required,omitempty"`
+	TFASessionID string `json:"tfa_session_id,omitempty"`
+	TFAMethod    string `json:"tfa_method,omitempty"`
+	ExpiresIn    int    `json:"expires_in,omitempty"`
+	Ok           bool   `json:"ok,omitempty"`
 }
 
 type workerError struct {
@@ -495,6 +520,146 @@ func (w *WorkerClient) Logout(accessToken string) error {
 
 	if e.Message != "" {
 		return fmt.Errorf("%s", e.Message)
+	}
+
+	return nil
+}
+
+func (w *WorkerClient) linkStart(subject, accessToken, field, value, tfaSessionID, code string) (*CredentialLinkStartResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":   accessToken,
+		field:            value,
+		"tfa_session_id": tfaSessionID,
+		"code":           code,
+	})
+	msg, err := w.nc.Request(subject, payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker %s: %w", subject, err)
+	}
+
+	var result CredentialLinkStartResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker %s decode: %w", subject, err)
+	}
+
+	if result.VerificationSessionID == "" && !result.TFARequired {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) linkConfirm(subject, accessToken, sessionID, code string) error {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":            accessToken,
+		"verification_session_id": sessionID,
+		"code":                    code,
+	})
+	msg, err := w.nc.Request(subject, payload, w.timeout)
+	if err != nil {
+		return fmt.Errorf("worker %s: %w", subject, err)
+	}
+
+	var result struct {
+		Ok      bool   `json:"ok"`
+		Message string `json:"message"`
+	}
+	json.Unmarshal(msg.Data, &result)
+	if !result.Ok {
+		return fmt.Errorf("%s", result.Message)
+	}
+
+	return nil
+}
+
+func (w *WorkerClient) credentialDirect(subject string, payload []byte) (*CredentialDirectResult, error) {
+	msg, err := w.nc.Request(subject, payload, w.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("worker %s: %w", subject, err)
+	}
+
+	var result CredentialDirectResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return nil, fmt.Errorf("worker %s decode: %w", subject, err)
+	}
+
+	if !result.Ok && !result.TFARequired {
+		var e workerError
+		json.Unmarshal(msg.Data, &e)
+		return nil, fmt.Errorf("%s", e.Message)
+	}
+
+	return &result, nil
+}
+
+func (w *WorkerClient) LinkEmailStart(accessToken, email, tfaSessionID, code string) (*CredentialLinkStartResult, error) {
+	return w.linkStart("auth.credential.link.email.start", accessToken, "email", email, tfaSessionID, code)
+}
+
+func (w *WorkerClient) LinkEmailConfirm(accessToken, verificationSessionID, code string) error {
+	return w.linkConfirm("auth.credential.link.email.confirm", accessToken, verificationSessionID, code)
+}
+
+func (w *WorkerClient) LinkPhoneStart(accessToken, phone, tfaSessionID, code string) (*CredentialLinkStartResult, error) {
+	return w.linkStart("auth.credential.link.phone.start", accessToken, "phone", phone, tfaSessionID, code)
+}
+
+func (w *WorkerClient) LinkPhoneConfirm(accessToken, verificationSessionID, code string) error {
+	return w.linkConfirm("auth.credential.link.phone.confirm", accessToken, verificationSessionID, code)
+}
+
+func (w *WorkerClient) LinkOAuth(accessToken, provider, providerID, email, name, tfaSessionID, code string) (*CredentialDirectResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":   accessToken,
+		"provider":       provider,
+		"provider_id":    providerID,
+		"email":          email,
+		"name":           name,
+		"tfa_session_id": tfaSessionID,
+		"code":           code,
+	})
+
+	return w.credentialDirect("auth.credential.link.oauth", payload)
+}
+
+func (w *WorkerClient) LinkWeb3(accessToken, address, tfaSessionID, code string) (*CredentialDirectResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":   accessToken,
+		"address":        address,
+		"tfa_session_id": tfaSessionID,
+		"code":           code,
+	})
+
+	return w.credentialDirect("auth.credential.link.web3", payload)
+}
+
+func (w *WorkerClient) UnlinkDirect(accessToken, credentialID, tfaSessionID, code string) (*CredentialDirectResult, error) {
+	payload, _ := json.Marshal(map[string]string{
+		"access_token":   accessToken,
+		"credential_id":  credentialID,
+		"tfa_session_id": tfaSessionID,
+		"code":           code,
+	})
+
+	return w.credentialDirect("auth.credential.unlink", payload)
+}
+
+func (w *WorkerClient) TfaResend(accessToken, tfaSessionID string) error {
+	payload, _ := json.Marshal(map[string]string{"access_token": accessToken, "tfa_session_id": tfaSessionID})
+	msg, err := w.nc.Request("auth.tfa.resend", payload, w.timeout)
+	if err != nil {
+		return fmt.Errorf("worker tfa.resend: %w", err)
+	}
+
+	var result struct {
+		Ok      bool   `json:"ok"`
+		Message string `json:"message"`
+	}
+	json.Unmarshal(msg.Data, &result)
+	if !result.Ok {
+		return fmt.Errorf("%s", result.Message)
 	}
 
 	return nil

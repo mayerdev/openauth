@@ -2,6 +2,7 @@ package router
 
 import (
 	"openauth/worker/controllers/auth"
+	"openauth/worker/controllers/credentials"
 	"openauth/worker/controllers/roles"
 	"openauth/worker/utils"
 )
@@ -27,6 +28,15 @@ func Setup() {
 	utils.Nats.QueueSubscribe("auth.totp.unlink", queueGroup, auth.TotpUnlink)
 	utils.Nats.QueueSubscribe("auth.tfa.method.get", queueGroup, auth.TfaMethodGet)
 	utils.Nats.QueueSubscribe("auth.tfa.method.set", queueGroup, auth.TfaMethodSet)
+
+	utils.Nats.QueueSubscribe("auth.credential.link.email.start", queueGroup, credentials.LinkEmailStart)
+	utils.Nats.QueueSubscribe("auth.credential.link.email.confirm", queueGroup, credentials.LinkEmailConfirm)
+	utils.Nats.QueueSubscribe("auth.credential.link.phone.start", queueGroup, credentials.LinkPhoneStart)
+	utils.Nats.QueueSubscribe("auth.credential.link.phone.confirm", queueGroup, credentials.LinkPhoneConfirm)
+	utils.Nats.QueueSubscribe("auth.credential.link.oauth", queueGroup, credentials.LinkOAuth)
+	utils.Nats.QueueSubscribe("auth.credential.link.web3", queueGroup, credentials.LinkWeb3)
+	utils.Nats.QueueSubscribe("auth.credential.unlink", queueGroup, credentials.UnlinkDirect)
+	utils.Nats.QueueSubscribe("auth.tfa.resend", queueGroup, credentials.TfaResend)
 
 	utils.Nats.QueueSubscribe("auth.roles.assign", queueGroup, roles.AssignRole)
 	utils.Nats.QueueSubscribe("auth.roles.revoke", queueGroup, roles.RevokeRole)

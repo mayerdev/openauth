@@ -7,7 +7,6 @@ import (
 	"openauth/gateway/transport"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/redis/go-redis/v9"
 )
 
 var _ federation.Provider = (*Provider)(nil)
@@ -23,10 +22,7 @@ type Provider struct {
 	introspectHandler       *handlers.IntrospectHandler
 }
 
-func NewProvider(worker transport.Worker, sessions *services.AuthSessionService, codes *services.AuthCodeService, rdb *redis.Client) *Provider {
-	oauthStates := services.NewOAuthStateService(rdb)
-	web3Nonces := services.NewWeb3NonceService(rdb)
-
+func NewProvider(worker transport.Worker, sessions *services.AuthSessionService, codes *services.AuthCodeService, oauthStates *services.OAuthStateService, web3Nonces *services.Web3NonceService) *Provider {
 	return &Provider{
 		authorizeHandler:        handlers.NewAuthorizeHandler(sessions),
 		loginHandler:            handlers.NewLoginHandler(sessions, worker, codes),
