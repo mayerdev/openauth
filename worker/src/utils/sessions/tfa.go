@@ -50,7 +50,7 @@ end
 return 2
 `)
 
-func CreateTfaSession(ctx context.Context, userID uuid.UUID, method string, ttl time.Duration, authSessionID string) (string, error) {
+func CreateTfaSession(ctx context.Context, userID uuid.UUID, method, credType string, ttl time.Duration, authSessionID string) (string, error) {
 	if authSessionID != "" {
 		mappingKey := fmt.Sprintf("%s:%s", prefixAuthTfaMapping, authSessionID)
 		if existingID, err := utils.Redis.Get(ctx, mappingKey).Result(); err == nil && existingID != "" {
@@ -69,8 +69,9 @@ func CreateTfaSession(ctx context.Context, userID uuid.UUID, method string, ttl 
 	key := fmt.Sprintf("%s:%s", prefixTfaSession, sessionID)
 
 	if err := utils.Redis.HSet(ctx, key, map[string]interface{}{
-		"user_id": userID.String(),
-		"method":  method,
+		"user_id":   userID.String(),
+		"method":    method,
+		"cred_type": credType,
 	}).Err(); err != nil {
 		return "", err
 	}
@@ -87,24 +88,24 @@ func CreateTfaSession(ctx context.Context, userID uuid.UUID, method string, ttl 
 	return sessionID, nil
 }
 
-func GetTfaSession(ctx context.Context, sessionID string) (uuid.UUID, string, error) {
+func GetTfaSession(ctx context.Context, sessionID string) (uuid.UUID, string, string, error) {
 	key := fmt.Sprintf("%s:%s", prefixTfaSession, sessionID)
 
 	data, err := utils.Redis.HGetAll(ctx, key).Result()
 	if err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil, "", "", err
 	}
 
 	if len(data) == 0 {
-		return uuid.Nil, "", errors.New("session not found")
+		return uuid.Nil, "", "", errors.New("session not found")
 	}
 
 	userID, err := uuid.Parse(data["user_id"])
 	if err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil, "", "", err
 	}
 
-	return userID, data["method"], nil
+	return userID, data["method"], data["cred_type"], nil
 }
 
 func DeleteTfaSession(ctx context.Context, sessionID string) error {

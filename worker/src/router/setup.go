@@ -15,6 +15,7 @@ func Setup() {
 	utils.Nats.QueueSubscribe("auth.token.refresh", queueGroup, auth.Refresh)
 	utils.Nats.QueueSubscribe("auth.session.verify", queueGroup, auth.Verify)
 	utils.Nats.QueueSubscribe("auth.logout", queueGroup, auth.Logout)
+	utils.Nats.QueueSubscribe("auth.history.get", queueGroup, auth.GetHistory)
 	utils.Nats.QueueSubscribe("auth.method.oauth", queueGroup, auth.OAuthMethod)
 	utils.Nats.QueueSubscribe("auth.method.web3", queueGroup, auth.Web3Method)
 

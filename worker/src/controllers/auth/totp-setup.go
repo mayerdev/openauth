@@ -206,7 +206,7 @@ func TotpUnlink(msg *nats.Msg) {
 
 func startTfaFlow(user *models.User) (*TfaRequiredResult, error) {
 	ctx := context.Background()
-	tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute, "")
+	tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, "", 5*time.Minute, "")
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +247,7 @@ func verifyTfaFlow(sessionID, code string, user *models.User) error {
 	}
 
 	ctx := context.Background()
-	userID, method, err := sessions.GetTfaSession(ctx, sessionID)
+	userID, method, _, err := sessions.GetTfaSession(ctx, sessionID)
 	if err != nil || userID != user.ID {
 		return fmt.Errorf("Invalid session")
 	}

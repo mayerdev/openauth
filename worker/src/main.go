@@ -25,6 +25,7 @@ func main() {
 
 	utils.Database.AutoMigrate(&models.User{})
 	utils.Database.AutoMigrate(&models.UserCredential{})
+	utils.Database.AutoMigrate(&models.AuthHistory{})
 
 	router.Setup()
 

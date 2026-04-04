@@ -24,7 +24,7 @@ type FindOrCreateResult struct {
 	TFAMethod    string
 }
 
-func FindOrCreateByCredential(credType, value string, bypassTFA bool, scope, authSessionID string) (*FindOrCreateResult, error) {
+func FindOrCreateByCredential(credType, value string, bypassTFA bool, scope, authSessionID, ipAddress, userAgent string) (*FindOrCreateResult, error) {
 	ctx := context.Background()
 
 	user, _, err := credentials.FindUserByCredential(utils.Database, credType, value)
@@ -57,7 +57,7 @@ func FindOrCreateByCredential(credType, value string, bypassTFA bool, scope, aut
 	}
 
 	if !bypassTFA && user.TfaMethod != "none" {
-		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute, authSessionID)
+		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, credType, 5*time.Minute, authSessionID)
 		if err != nil {
 			return nil, errors.New("internal error")
 		}
@@ -109,6 +109,8 @@ func FindOrCreateByCredential(credType, value string, bypassTFA bool, scope, aut
 	if err := sessions.SaveSession(ctx, sessionID, user.ID, time.Duration(utils.Config.JWT.RefreshTokenTTL)*time.Second); err != nil {
 		return nil, errors.New("internal error")
 	}
+
+	saveAuthHistory(user.ID, sessionID, credType, ipAddress, userAgent)
 
 	return &FindOrCreateResult{
 		AccessToken:  accessToken,

@@ -24,6 +24,8 @@ type CredentialVerifyRequest struct {
 	SessionID string `json:"session_id"`
 	Code      string `json:"code"`
 	Scope     string `json:"scope"`
+	IPAddress string `json:"ip_address"`
+	UserAgent string `json:"user_agent"`
 }
 
 type CredentialVerifyResendRequest struct {
@@ -120,6 +122,8 @@ func CredentialVerify(msg *nats.Msg) {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
+
+	saveAuthHistory(userID, sessionID, credType, req.IPAddress, req.UserAgent)
 
 	data, _ := json.Marshal(AuthResult{
 		AccessToken:  accessToken,

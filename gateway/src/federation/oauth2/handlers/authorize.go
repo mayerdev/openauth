@@ -92,16 +92,18 @@ func (h *LoginHandler) PostAuthorize(c fiber.Ctx) error {
 		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "invalid auth_session_id"})
 	}
 
+	ipAddress := extractClientIP(c)
+	userAgent := c.Get("User-Agent")
+
 	// TFA step: tfa_session_id + code present
 	if req.TFASessionID != "" && req.Code != "" {
-		tokens, err := h.worker.TFAVerify(req.TFASessionID, req.Code, sess.Scope)
+		tokens, err := h.worker.TFAVerify(req.TFASessionID, req.Code, sess.Scope, ipAddress, userAgent)
 		if err != nil {
 			return c.Status(401).JSON(ErrorResponse{Error: "invalid_grant", ErrorDescription: err.Error()})
 		}
 		return h.issueCodeAndRedirect(c, sess, req.AuthSessionID, tokens.AccessToken, tokens.RefreshToken)
 	}
 
-	// Login step
 	method := req.Method
 	if method == "" {
 		method = "email"
@@ -111,7 +113,7 @@ func (h *LoginHandler) PostAuthorize(c fiber.Ctx) error {
 		identifier = req.Phone
 	}
 
-	result, err := h.worker.Login(method, identifier, req.Password, sess.Scope, req.AuthSessionID)
+	result, err := h.worker.Login(method, identifier, req.Password, sess.Scope, req.AuthSessionID, ipAddress, userAgent)
 	if err != nil {
 		return c.Status(401).JSON(ErrorResponse{Error: "invalid_credentials", ErrorDescription: err.Error()})
 	}

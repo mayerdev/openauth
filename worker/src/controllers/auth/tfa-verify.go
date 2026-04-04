@@ -20,6 +20,8 @@ type TfaVerifyRequest struct {
 	SessionID string `json:"session_id" validate:"required"`
 	Code      string `json:"code" validate:"required"`
 	Scope     string `json:"scope"`
+	IPAddress string `json:"ip_address"`
+	UserAgent string `json:"user_agent"`
 }
 
 func TfaVerify(msg *nats.Msg) {
@@ -48,7 +50,7 @@ func TfaVerify(msg *nats.Msg) {
 
 	ctx := context.Background()
 
-	userID, method, err := sessions.GetTfaSession(ctx, req.SessionID)
+	userID, method, credType, err := sessions.GetTfaSession(ctx, req.SessionID)
 	if err != nil {
 		msg.Respond(types.EmitError("Invalid session", types.NoErrors))
 		return
@@ -135,6 +137,8 @@ func TfaVerify(msg *nats.Msg) {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
+
+	saveAuthHistory(userID, sessionID, credType, req.IPAddress, req.UserAgent)
 
 	data, _ := json.Marshal(AuthResult{
 		AccessToken:  accessToken,

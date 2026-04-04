@@ -11,8 +11,10 @@ import (
 )
 
 type Web3MethodRequest struct {
-	Address string `json:"address" validate:"required"`
-	Scope   string `json:"scope"`
+	Address   string `json:"address" validate:"required"`
+	Scope     string `json:"scope"`
+	IPAddress string `json:"ip_address"`
+	UserAgent string `json:"user_agent"`
 }
 
 func Web3Method(msg *nats.Msg) {
@@ -33,6 +35,8 @@ func Web3Method(msg *nats.Msg) {
 		true,
 		req.Scope,
 		"",
+		req.IPAddress,
+		req.UserAgent,
 	)
 
 	if err != nil {

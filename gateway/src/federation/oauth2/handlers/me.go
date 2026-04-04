@@ -33,9 +33,23 @@ func bearerToken(c fiber.Ctx) (string, bool) {
 	if !strings.HasPrefix(auth, "Bearer ") {
 		return "", false
 	}
+
 	token := strings.TrimPrefix(auth, "Bearer ")
 	if token == "" {
 		return "", false
 	}
+
 	return token, true
+}
+
+func extractClientIP(c fiber.Ctx) string {
+	if ip := c.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+
+	if ip := c.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+
+	return c.IP()
 }

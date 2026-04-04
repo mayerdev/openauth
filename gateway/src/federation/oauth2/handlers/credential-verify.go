@@ -27,7 +27,7 @@ func (h *CredentialVerifyHandler) PostVerify(c fiber.Ctx) error {
 		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "invalid auth_session_id"})
 	}
 
-	result, err := h.worker.CredentialVerify(req.VerificationSessionID, req.Code, sess.Scope)
+	result, err := h.worker.CredentialVerify(req.VerificationSessionID, req.Code, sess.Scope, extractClientIP(c), c.Get("User-Agent"))
 	if err != nil {
 		return c.Status(400).JSON(ErrorResponse{Error: "verification_failed", ErrorDescription: err.Error()})
 	}

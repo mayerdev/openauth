@@ -89,7 +89,7 @@ func (h *Web3MethodHandler) PostConsume(c fiber.Ctx) error {
 		return c.Status(400).JSON(ErrorResponse{Error: "invalid_request", ErrorDescription: "nonce mismatch"})
 	}
 
-	result, err := h.worker.Web3Method(address, sess.Scope)
+	result, err := h.worker.Web3Method(address, sess.Scope, extractClientIP(c), c.Get("User-Agent"))
 	if err != nil {
 		return c.Status(401).JSON(ErrorResponse{Error: "invalid_credentials", ErrorDescription: err.Error()})
 	}

@@ -173,7 +173,7 @@ func (h *OAuthMethodHandler) GetCallback(c fiber.Ctx) error {
 		return c.Status(500).JSON(ErrorResponse{Error: "server_error", ErrorDescription: "failed to fetch user info"})
 	}
 
-	result, err := h.worker.OAuthMethod(provider, userInfo.id(), userInfo.Email, userInfo.name(), sess.Scope, oauthState.AuthSessionID)
+	result, err := h.worker.OAuthMethod(provider, userInfo.id(), userInfo.Email, userInfo.name(), sess.Scope, oauthState.AuthSessionID, extractClientIP(c), c.Get("User-Agent"))
 	if err != nil {
 		return c.Status(401).JSON(ErrorResponse{Error: "invalid_credentials", ErrorDescription: err.Error()})
 	}

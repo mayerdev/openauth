@@ -21,6 +21,42 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/history:
+    get:
+      summary: Get authorization history for the current user
+      description: |
+        Returns a paginated list of login events for the authenticated user,
+        ordered by login date descending (newest first).
+
+        IP resolution order: `CF-Connecting-IP` → `X-Real-IP` → direct connection IP.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-based)
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of entries per page
+      responses:
+        "200":
+          description: Authorization history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthHistoryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/totp/start:
     post:
       summary: Begin TOTP setup — generates a new secret and provisioning URI
@@ -562,6 +598,53 @@ components:
         verified:
           type: boolean
       required: [id, type, value, verified]
+
+    # ─── Auth History ─────────────────────────────────────────────────────────
+
+    AuthHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        method:
+          type: string
+          description: "Auth method used: email | phone | oauth:{provider} | web3"
+          example: email
+        ip_address:
+          type: string
+          description: Client IP address
+          example: "93.184.216.34"
+        user_agent:
+          type: string
+          description: Client User-Agent header value
+          example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ..."
+        created_at:
+          type: string
+          format: date-time
+      required: [id, session_id, method, ip_address, user_agent, created_at]
+
+    AuthHistoryResponse:
+      type: object
+      properties:
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthHistoryEntry"
+          description: Entries for the requested page, ordered by login date descending
+        total:
+          type: integer
+          format: int64
+          description: Total number of login events across all pages
+        page:
+          type: integer
+          description: Current page number
+        page_size:
+          type: integer
+          description: Number of entries per page
+      required: [history, total, page, page_size]
 
     # ─── Auth flow ────────────────────────────────────────────────────────────
 

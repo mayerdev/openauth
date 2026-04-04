@@ -16,6 +16,8 @@ type OAuthMethodRequest struct {
 	Name          string `json:"name"`
 	Scope         string `json:"scope"`
 	AuthSessionID string `json:"auth_session_id"`
+	IPAddress     string `json:"ip_address"`
+	UserAgent     string `json:"user_agent"`
 }
 
 func OAuthMethod(msg *nats.Msg) {
@@ -36,6 +38,8 @@ func OAuthMethod(msg *nats.Msg) {
 		false,
 		req.Scope,
 		req.AuthSessionID,
+		req.IPAddress,
+		req.UserAgent,
 	)
 
 	if err != nil {

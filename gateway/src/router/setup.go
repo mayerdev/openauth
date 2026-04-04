@@ -3,13 +3,14 @@ package router
 import (
 	"time"
 
-	"github.com/gofiber/fiber/v3"
 	"openauth/gateway/federation"
 	oauth2provider "openauth/gateway/federation/oauth2"
 	"openauth/gateway/federation/oauth2/handlers"
 	"openauth/gateway/services"
 	"openauth/gateway/transport"
 	"openauth/gateway/utils"
+
+	"github.com/gofiber/fiber/v3"
 )
 
 func Setup() *fiber.App {
@@ -29,6 +30,7 @@ func Setup() *fiber.App {
 
 	me := handlers.NewMeHandler(worker)
 	totp := handlers.NewTotpHandler(worker)
+	history := handlers.NewHistoryHandler(worker)
 
 	api := app.Group("/api")
 	api.Post("/logout", me.PostLogout)
@@ -37,6 +39,7 @@ func Setup() *fiber.App {
 	api.Post("/totp/unlink", totp.PostTotpUnlink)
 	api.Get("/tfa/method", totp.GetTfaMethod)
 	api.Put("/tfa/method", totp.PutTfaMethod)
+	api.Get("/history", history.GetHistory)
 
 	return app
 }

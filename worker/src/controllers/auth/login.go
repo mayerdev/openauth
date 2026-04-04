@@ -26,6 +26,8 @@ type LoginRequest struct {
 	Password      string `json:"password" validate:"required,password"`
 	Scope         string `json:"scope"`
 	AuthSessionID string `json:"auth_session_id"`
+	IPAddress     string `json:"ip_address"`
+	UserAgent     string `json:"user_agent"`
 }
 
 func Login(msg *nats.Msg) {
@@ -110,7 +112,7 @@ func Login(msg *nats.Msg) {
 	ctx := context.Background()
 
 	if user.TfaMethod != "none" {
-		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, 5*time.Minute, req.AuthSessionID)
+		tfaSessionID, err := sessions.CreateTfaSession(ctx, user.ID, user.TfaMethod, credType, 5*time.Minute, req.AuthSessionID)
 		if err != nil {
 			msg.Respond(types.EmitError("Internal error", types.NoErrors))
 			return
@@ -171,6 +173,8 @@ func Login(msg *nats.Msg) {
 		msg.Respond(types.EmitError("Internal error", types.NoErrors))
 		return
 	}
+
+	saveAuthHistory(user.ID, sessionID, credType, req.IPAddress, req.UserAgent)
 
 	data, _ := json.Marshal(AuthResult{
 		AccessToken:  accessToken,
